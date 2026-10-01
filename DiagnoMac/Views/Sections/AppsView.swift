@@ -133,9 +133,27 @@ struct AppIcon: View {
     let path: String?
     var body: some View {
         if let path {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: path)).resizable().interpolation(.high)
+            Image(nsImage: AppIconCache.icon(for: path)).resizable().interpolation(.high)
         } else {
             Image(systemName: "app").resizable().foregroundStyle(.secondary)
         }
+    }
+}
+
+/// Finder icons carry every size up to 1024 px; rows show them at 20–24 points, so a small copy
+/// is kept per app instead of asking NSWorkspace again on every redraw.
+@MainActor
+enum AppIconCache {
+    private static let cache = NSCache<NSString, NSImage>()
+
+    static func icon(for path: String) -> NSImage {
+        if let cached = cache.object(forKey: path as NSString) { return cached }
+        let full = NSWorkspace.shared.icon(forFile: path)
+        let small = NSImage(size: NSSize(width: 32, height: 32), flipped: false) { rect in
+            full.draw(in: rect)
+            return true
+        }
+        cache.setObject(small, forKey: path as NSString)
+        return small
     }
 }

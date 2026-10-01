@@ -72,6 +72,14 @@ struct MenuBarView: View {
                 }
             }
 
+            if let version = model.updates.available {
+                Divider()
+                Button { model.updates.checkForUpdates() } label: {
+                    Label("DiagnoMac \(version) is available", systemImage: "arrow.down.circle.fill")
+                }
+                .buttonStyle(.link)
+            }
+
             Divider()
 
             HStack {
@@ -87,6 +95,8 @@ struct MenuBarView: View {
         }
         .padding(16)
         .frame(width: 320)
+        .onAppear { model.setMenuBarPanelVisible(true) }
+        .onDisappear { model.setMenuBarPanelVisible(false) }
     }
 
     private var summary: String {

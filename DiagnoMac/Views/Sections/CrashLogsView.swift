@@ -5,6 +5,7 @@ struct CrashLogsView: View {
     @State private var days = 7
 
     var body: some View {
+        let _ = model.intelligence.checkAvailabilityIfNeeded()
         Page("Crash Logs", subtitle: "Apps that crashed, froze or ran out of memory, grouped by app.") {
             HStack {
                 Picker("Period", selection: $days) {

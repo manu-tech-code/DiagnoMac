@@ -57,10 +57,15 @@ final class Intelligence {
     private var chatTask: Task<Void, Never>?
 
     var isAvailable: Bool { availability == .available }
+    private var checkedAvailability = false
 
-    init() { refreshAvailability() }
+    /// Checked on first use rather than at launch, so a menu-bar-only launch never loads the model framework.
+    func checkAvailabilityIfNeeded() {
+        if !checkedAvailability { refreshAvailability() }
+    }
 
     func refreshAvailability() {
+        checkedAvailability = true
         #if canImport(FoundationModels)
         if #available(macOS 26.0, *) {
             availability = FMBridge.availability()
@@ -203,8 +208,8 @@ final class Intelligence {
 enum AIPrompts {
     /// Facts the on-device model tends to get wrong without being told.
     static let macFacts = """
-    Facts: deleting caches or files frees disk space, not memory (RAM). To free memory, quit idle apps, close browser tabs, \
-    or restart. Swap is memory stored on the SSD when RAM is full. Crashes in macOS's own processes are fixed by macOS updates, \
+    Facts: deleting caches or files frees disk space, not memory (RAM), and doesn't make the Mac faster unless the disk \
+    is nearly full. To free memory, quit idle apps, close browser tabs, or restart. Swap is memory stored on the SSD when RAM is full. Crashes in macOS's own processes are fixed by macOS updates, \
     not by the owner. Time Machine needs an external or network disk.
     """
 

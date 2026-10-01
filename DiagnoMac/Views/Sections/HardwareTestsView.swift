@@ -6,7 +6,7 @@ struct HardwareTestsView: View {
         Page("Hardware Tests", subtitle: "Interactive tests for parts that sensors can't check for you.") {
             VStack(alignment: .leading, spacing: 14) {
                 KeyboardTestCard()
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 14, alignment: .top)], spacing: 14) {
+                Columns(minimum: 320) {
                     DisplayTestCard()
                     SpeakerTestCard()
                     TrackpadTestCard()

@@ -59,8 +59,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let defaults = UserDefaults.standard
-        guard launchedAtLogin, defaults.bool(forKey: Preferences.startInMenuBarKey),
-              defaults.bool(forKey: Preferences.showMenuBarIconKey) else { return }
+        // `-menuBarOnly` starts the way a login launch does, without a window (used by scripts/measure.sh).
+        let menuBarOnly = ProcessInfo.processInfo.arguments.contains("-menuBarOnly")
+            || (launchedAtLogin && defaults.bool(forKey: Preferences.startInMenuBarKey))
+        guard menuBarOnly, defaults.bool(forKey: Preferences.showMenuBarIconKey) else { return }
         NSApp.setActivationPolicy(.accessory)
         // SwiftUI opens the main window during launch; close it once it exists.
         DispatchQueue.main.async {
@@ -68,6 +70,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 window.close()
             }
         }
+    }
+
+    /// Closing the window keeps DiagnoMac running in the menu bar. Without this, SwiftUI quits an
+    /// app whose main scene is a single `Window` as soon as that window closes.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        !UserDefaults.standard.bool(forKey: Preferences.showMenuBarIconKey)
     }
 
     /// Clicking the Dock icon or reopening the app from Finder brings the window back.

@@ -8,7 +8,7 @@ struct SecurityView: View {
             Button("Recheck") { Task { await model.refresh(.security) } }
         } content: {
             if let sec = model.snapshot.security {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 14, alignment: .top)], spacing: 14) {
+                Columns(minimum: 320) {
                     ForEach(sec.checks) { check in
                         Card {
                             HStack {

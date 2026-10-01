@@ -133,20 +133,6 @@ enum NetworkCollector {
         return ping.succeeded
     }
 
-    /// Runs Apple's built-in networkQuality tool. Takes 10-20 seconds.
-    static func speedTest() async -> SpeedTestResult? {
-        let result = await Shell.run("/usr/bin/networkQuality", ["-c", "-M", "20"], timeout: 45)
-        guard let json = try? JSONSerialization.jsonObject(with: Data(result.stdout.utf8)) as? [String: Any] else { return nil }
-        let down = (json["dl_throughput"] as? Double) ?? 0
-        let up = (json["ul_throughput"] as? Double) ?? 0
-        return SpeedTestResult(
-            downloadMbps: down / 1_000_000,
-            uploadMbps: up / 1_000_000,
-            responsivenessRPM: (json["responsiveness"] as? Double).map { Int($0) } ?? (json["dl_responsiveness"] as? Double).map { Int($0) },
-            idleLatencyMs: json["base_rtt"] as? Double
-        )
-    }
-
     private final class OnceFlag: @unchecked Sendable {
         private let lock = NSLock()
         private var done = false

@@ -7,8 +7,11 @@ import IOKit
 final class GPUSampler {
     private var previousTotals: [Int32: UInt64] = [:]
     private var previousTime: UInt64 = 0
+    private var lastProcesses: [GPUProcessUsage] = []
 
-    func sample() -> GPUInfo? {
+    /// `includeProcesses` reads every GPU client's counters as well; that's only needed while
+    /// the CPU & GPU page is open.
+    func sample(includeProcesses: Bool = true) -> GPUInfo? {
         var iterator: io_iterator_t = 0
         guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOAccelerator"), &iterator) == KERN_SUCCESS else { return nil }
         defer { IOObjectRelease(iterator) }
@@ -29,11 +32,17 @@ final class GPUSampler {
                                allocatedMemory: bytes("Alloc system memory"),
                                processes: [])
             }
-            readClients(of: accelerator, into: &totals, names: &names)
+            if includeProcesses { readClients(of: accelerator, into: &totals, names: &names) }
         }
+        guard includeProcesses else { return info }
 
         let now = DispatchTime.now().uptimeNanoseconds
         let elapsed = Double(now &- previousTime)
+        // Under half a second is too short to measure; keep the last reading and baseline.
+        if previousTime > 0, elapsed < 500_000_000 {
+            info?.processes = lastProcesses
+            return info
+        }
         if previousTime > 0, elapsed > 0 {
             info?.processes = totals.compactMap { pid, total -> GPUProcessUsage? in
                 guard let before = previousTotals[pid], total >= before else { return nil }
@@ -46,6 +55,7 @@ final class GPUSampler {
         }
         previousTotals = totals
         previousTime = now
+        lastProcesses = info?.processes ?? []
         return info
     }
 

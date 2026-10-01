@@ -1,4 +1,4 @@
-import Charts
+import AppKit
 import SwiftUI
 
 extension Severity {
@@ -69,9 +69,21 @@ struct Card<Content: View>: View {
             content()
         }
         .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        // Fill the row: cards next to each other are as tall as the tallest.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator.opacity(0.6)))
+    }
+}
+
+/// Cards side by side, all as tall as the tallest.
+struct CardRow<Content: View>: View {
+    var spacing: CGFloat = 14
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        HStack(alignment: .top, spacing: spacing) { content() }
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -86,7 +98,9 @@ struct StatTile: View {
         Card(title) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    Text(value).font(.system(size: 26, weight: .medium, design: .rounded)).monospacedDigit()
+                    RollingText(text: value)
+                        // SwiftUI can't read an AppKit view's baseline, so it's given here.
+                        .alignmentGuide(.firstTextBaseline) { _ in RollingText.baseline(size: 26) }
                     if let unit { Text(unit).foregroundStyle(.secondary) }
                 }
                 .lineLimit(1).minimumScaleFactor(0.6)
@@ -192,7 +206,7 @@ struct ScoreRing: View {
             Circle().trim(from: 0, to: CGFloat(score) / 100)
                 .stroke(color, style: StrokeStyle(lineWidth: 10, lineCap: .round))
                 .rotationEffect(.degrees(-90))
-                .animation(.easeOut(duration: 0.6), value: score)
+                .animation(.smooth(duration: 0.9), value: score)
             VStack(spacing: 0) {
                 Text("\(score)").font(.system(size: size * 0.33, weight: .bold, design: .rounded)).contentTransition(.numericText())
                 Text("of 100").font(.caption).foregroundStyle(.secondary)
@@ -240,12 +254,57 @@ struct LoadingCard: View {
     }
 }
 
+/// A grid of cards with equal widths and, within each row, equal heights. It picks a column count
+/// the cards fill: three tiles get three columns rather than three of four, and a short last row
+/// shares the width between its cards.
 struct Columns<Content: View>: View {
     var minimum: CGFloat = 200
+    var spacing: CGFloat = 14
     @ViewBuilder var content: () -> Content
+
     var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: minimum), spacing: 14, alignment: .top)], alignment: .leading, spacing: 14) {
-            content()
+        EqualColumnsLayout(minimum: minimum, spacing: spacing) { content() }
+    }
+}
+
+struct EqualColumnsLayout: Layout {
+    var minimum: CGFloat
+    var spacing: CGFloat
+
+    /// As many columns as fit, balanced so rows hold nearly the same number of cards.
+    private func columns(width: CGFloat, count: Int) -> Int {
+        guard count > 0 else { return 1 }
+        let fit = max(1, Int((width + spacing) / (minimum + spacing)))
+        let rows = (count + min(fit, count) - 1) / min(fit, count)
+        return (count + rows - 1) / rows
+    }
+
+    private func rows(_ subviews: Subviews, width: CGFloat) -> [(range: Range<Int>, height: CGFloat, cardWidth: CGFloat)] {
+        let cols = columns(width: width, count: subviews.count)
+        return stride(from: 0, to: subviews.count, by: cols).map { start in
+            let range = start..<min(start + cols, subviews.count)
+            let n = CGFloat(range.count)
+            let cardWidth = (width - spacing * (n - 1)) / n
+            let height = range.map { subviews[$0].sizeThatFits(ProposedViewSize(width: cardWidth, height: nil)).height }.max() ?? 0
+            return (range, height, cardWidth)
+        }
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? 800
+        let rows = rows(subviews, width: width)
+        let height = rows.map(\.height).reduce(0, +) + spacing * CGFloat(max(0, rows.count - 1))
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for row in rows(subviews, width: bounds.width) {
+            for (i, index) in row.range.enumerated() {
+                subviews[index].place(at: CGPoint(x: bounds.minX + CGFloat(i) * (row.cardWidth + spacing), y: y),
+                                      proposal: ProposedViewSize(width: row.cardWidth, height: row.height))
+            }
+            y += row.height + spacing
         }
     }
 }
@@ -379,45 +438,313 @@ struct AIBlock: View {
 struct LiveBadge: View {
     let text: String
     var color: Color = .green
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var pulse = false
 
     var body: some View {
         HStack(spacing: 6) {
-            Circle().fill(color).frame(width: 7, height: 7)
-                .opacity(pulse ? 0.3 : 1)
-                .animation(reduceMotion ? nil : .easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: pulse)
+            PulsingDot(color: NSColor(color)).frame(width: 7, height: 7)
             Text(text)
         }
         .font(.caption.weight(.semibold))
         .foregroundStyle(color)
         .padding(.horizontal, 8).padding(.vertical, 3)
         .background(color.opacity(0.14), in: Capsule())
-        .onAppear { pulse = true }
     }
 }
 
-/// Small line chart for a series of 0...1 values, newest on the right.
+/// A dot whose pulse Core Animation runs on its own, so the app does no work per frame.
+struct PulsingDot: NSViewRepresentable {
+    let color: NSColor
+
+    func makeNSView(context: Context) -> DotView { DotView() }
+    func updateNSView(_ view: DotView, context: Context) { view.color = color }
+
+    final class DotView: NSView {
+        var color: NSColor = .systemGreen { didSet { updateColor() } }
+        private let dot = CALayer()
+
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            wantsLayer = true
+            layer?.addSublayer(dot)
+        }
+
+        required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+        override func layout() {
+            super.layout()
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            dot.frame = bounds
+            dot.cornerRadius = bounds.width / 2
+            CATransaction.commit()
+            updateColor()
+            guard dot.animation(forKey: "pulse") == nil, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
+            let pulse = CABasicAnimation(keyPath: "opacity")
+            pulse.fromValue = 1
+            pulse.toValue = 0.3
+            pulse.duration = 0.9
+            pulse.autoreverses = true
+            pulse.repeatCount = .infinity
+            pulse.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            pulse.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 120, preferred: 60)
+            dot.add(pulse, forKey: "pulse")
+        }
+
+        override func viewDidChangeEffectiveAppearance() {
+            super.viewDidChangeEffectiveAppearance()
+            updateColor()
+        }
+
+        private func updateColor() {
+            effectiveAppearance.performAsCurrentDrawingAppearance { dot.backgroundColor = color.cgColor }
+        }
+    }
+}
+
+/// A live line chart for 0...1 values, newest on the right. Each new sample scrolls in smoothly
+/// over the time until the next one, at the display's full refresh rate. Core Animation does the
+/// motion, so the app only builds one path per sample.
 struct SparklineChart: View {
     let values: [Double]
     var color: Color = .accentColor
     var height: CGFloat = 140
+    /// How many samples fill the width; fewer leave the left side empty.
+    var capacity: Int = 120
+    /// Seconds between samples: how long each new one takes to scroll in.
+    var interval: TimeInterval = 1
 
     var body: some View {
-        Chart(Array(values.enumerated()), id: \.offset) { index, value in
-            AreaMark(x: .value("Sample", index), y: .value("Load", value * 100))
-                .foregroundStyle(color.opacity(0.15))
-            LineMark(x: .value("Sample", index), y: .value("Load", value * 100))
-                .foregroundStyle(color)
-        }
-        .chartYScale(domain: 0...100)
-        .chartXAxis(.hidden)
-        .chartYAxis {
-            AxisMarks(values: [0, 50, 100]) { value in
-                AxisGridLine()
-                AxisValueLabel { Text("\(value.as(Int.self) ?? 0)%") }
+        HStack(alignment: .top, spacing: 6) {
+            ScrollingLine(values: values, capacity: capacity, interval: interval, color: NSColor(color))
+            VStack {
+                Text("100%"); Spacer(); Text("50%"); Spacer(); Text("0%")
             }
+            .font(.caption2.monospacedDigit())
+            .foregroundStyle(.secondary)
         }
         .frame(height: height)
+        .accessibilityElement()
+        .accessibilityLabel("Load over time")
+        .accessibilityValue(values.last.map { "\(Int($0 * 100)) percent now" } ?? "No readings yet")
+    }
+}
+
+private struct ScrollingLine: NSViewRepresentable {
+    let values: [Double]
+    let capacity: Int
+    let interval: TimeInterval
+    let color: NSColor
+
+    func makeNSView(context: Context) -> LineView { LineView() }
+    func updateNSView(_ view: LineView, context: Context) {
+        view.update(values: values, capacity: capacity, interval: interval, color: color)
+    }
+
+    final class LineView: NSView {
+        private let grid = CAShapeLayer()
+        /// Holds the line and its fill; slides left by one step while a new sample comes in.
+        private let content = CALayer()
+        private let fill = CAShapeLayer()
+        private let line = CAShapeLayer()
+        private var values: [Double] = []
+        private var capacity = 120
+        private var interval: TimeInterval = 1
+        private var color: NSColor = .controlAccentColor
+        private var drawnSize: CGSize = .zero
+
+        override var isFlipped: Bool { true }
+
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            wantsLayer = true
+            layer?.masksToBounds = true
+            for shape in [grid, fill, line] { shape.fillColor = nil }
+            grid.lineWidth = 0.5
+            line.lineWidth = 1.5
+            line.lineJoin = .round
+            line.lineCap = .round
+            content.addSublayer(fill)
+            content.addSublayer(line)
+            layer?.addSublayer(grid)
+            layer?.addSublayer(content)
+        }
+
+        required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+        func update(values: [Double], capacity: Int, interval: TimeInterval, color: NSColor) {
+            let newSample = values != self.values
+            self.values = values
+            self.capacity = capacity
+            self.interval = interval
+            self.color = color
+            // Only a new sample redraws: an unrelated SwiftUI update mustn't restart the scroll.
+            if newSample { redraw(animated: values.count > 1 && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion) }
+        }
+
+        override func layout() {
+            super.layout()
+            if bounds.size != drawnSize { redraw(animated: false) }
+        }
+
+        override func viewDidChangeEffectiveAppearance() {
+            super.viewDidChangeEffectiveAppearance()
+            applyColors()
+        }
+
+        private func applyColors() {
+            effectiveAppearance.performAsCurrentDrawingAppearance {
+                grid.strokeColor = NSColor.secondaryLabelColor.withAlphaComponent(0.25).cgColor
+                line.strokeColor = color.cgColor
+                fill.fillColor = color.withAlphaComponent(0.15).cgColor
+            }
+        }
+
+        private func redraw(animated: Bool) {
+            guard bounds.width > 0, bounds.height > 0 else { return }
+            drawnSize = bounds.size
+            let w = bounds.width, h = bounds.height
+            let step = w / CGFloat(max(capacity - 1, 1))
+            // While scrolling, the newest point starts one step past the right edge.
+            let start = w + (animated ? step : 0) - step * CGFloat(max(values.count - 1, 0))
+
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            let gridPath = CGMutablePath()
+            for fraction in [0.0, 0.5, 1.0] {
+                let y = h * (1 - fraction)
+                gridPath.move(to: CGPoint(x: 0, y: y))
+                gridPath.addLine(to: CGPoint(x: w, y: y))
+            }
+            grid.frame = bounds
+            grid.path = gridPath
+            for shape in [content, fill, line] as [CALayer] { shape.frame = bounds }
+
+            let path = CGMutablePath()
+            for (i, value) in values.enumerated() {
+                let point = CGPoint(x: start + step * CGFloat(i), y: h * (1 - min(1, max(0, value))))
+                i == 0 ? path.move(to: point) : path.addLine(to: point)
+            }
+            line.path = path
+            if values.count > 1 {
+                let area = path.mutableCopy()!
+                area.addLine(to: CGPoint(x: start + step * CGFloat(values.count - 1), y: h))
+                area.addLine(to: CGPoint(x: start, y: h))
+                area.closeSubpath()
+                fill.path = area
+            } else {
+                fill.path = nil
+            }
+            applyColors()
+            content.removeAnimation(forKey: "scroll")
+            CATransaction.commit()
+
+            guard animated else { return }
+            let scroll = CABasicAnimation(keyPath: "transform.translation.x")
+            scroll.fromValue = 0
+            scroll.toValue = -step
+            scroll.duration = interval
+            scroll.timingFunction = CAMediaTimingFunction(name: .linear)
+            scroll.fillMode = .forwards
+            scroll.isRemovedOnCompletion = false
+            content.add(scroll, forKey: "scroll")
+        }
+    }
+}
+
+// MARK: - Rolling numbers
+
+/// Text that rolls to its new value. Core Animation slides the old value out and the new one in,
+/// so a reading that changes every second costs one text render per change, not one per frame.
+struct RollingText: NSViewRepresentable {
+    let text: String
+    var size: CGFloat = 26
+
+    nonisolated static func font(size: CGFloat) -> NSFont {
+        let base = NSFont.monospacedDigitSystemFont(ofSize: size, weight: .medium)
+        return base.fontDescriptor.withDesign(.rounded).flatMap { NSFont(descriptor: $0, size: size) } ?? base
+    }
+
+    /// Distance from the top of the view to the text's baseline.
+    nonisolated static func baseline(size: CGFloat) -> CGFloat { ceil(font(size: size).ascender) }
+
+    func makeNSView(context: Context) -> RollingTextView { RollingTextView(size: size) }
+    func updateNSView(_ view: RollingTextView, context: Context) { view.setText(text) }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: RollingTextView, context: Context) -> CGSize? {
+        nsView.intrinsicContentSize
+    }
+
+    final class RollingTextView: NSView {
+        private let textLayer = CATextLayer()
+        private let font: NSFont
+        private var current = ""
+
+        init(size: CGFloat) {
+            font = RollingText.font(size: size)
+            super.init(frame: .zero)
+            wantsLayer = true
+            layer?.masksToBounds = true
+            textLayer.alignmentMode = .left
+            textLayer.truncationMode = .end
+            layer?.addSublayer(textLayer)
+            setContentHuggingPriority(.required, for: .horizontal)
+            setContentHuggingPriority(.required, for: .vertical)
+        }
+
+        required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+        override var intrinsicContentSize: NSSize {
+            let width = (current as NSString).size(withAttributes: [.font: font]).width
+            return NSSize(width: ceil(width) + 1, height: ceil(font.ascender - font.descender))
+        }
+
+        func setText(_ new: String) {
+            guard new != current else { return }
+            let animate = !current.isEmpty && window != nil && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            let rising = (Double(new.filter { $0.isNumber || $0 == "." }) ?? 0) >= (Double(current.filter { $0.isNumber || $0 == "." }) ?? 0)
+            current = new
+            if animate {
+                let roll = CATransition()
+                roll.type = .push
+                roll.subtype = rising ? .fromBottom : .fromTop
+                roll.duration = 0.4
+                roll.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                textLayer.add(roll, forKey: "roll")
+            }
+            applyText()
+            invalidateIntrinsicContentSize()
+        }
+
+        override func layout() {
+            super.layout()
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            textLayer.frame = bounds
+            textLayer.contentsScale = window?.backingScaleFactor ?? 2
+            CATransaction.commit()
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            textLayer.contentsScale = window?.backingScaleFactor ?? 2
+        }
+
+        override func viewDidChangeEffectiveAppearance() {
+            super.viewDidChangeEffectiveAppearance()
+            applyText()
+        }
+
+        private func applyText() {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            effectiveAppearance.performAsCurrentDrawingAppearance {
+                // CATextLayer draws with Core Text, which reads its own color key.
+                textLayer.string = NSAttributedString(string: current, attributes: [
+                    .font: font,
+                    NSAttributedString.Key(kCTForegroundColorAttributeName as String): NSColor.labelColor.cgColor,
+                ])
+            }
+            CATransaction.commit()
+        }
     }
 }

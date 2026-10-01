@@ -5,6 +5,7 @@ struct StartupView: View {
     @State private var busy: Set<String> = []
 
     var body: some View {
+        let _ = model.intelligence.checkAvailabilityIfNeeded()
         Page("Startup Items", subtitle: "Background agents that start at login. Each one costs memory, battery and boot time.") {
             Button("Refresh") { Task { await model.refresh(.startup) } }
         } content: {

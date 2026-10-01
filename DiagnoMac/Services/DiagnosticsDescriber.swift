@@ -132,7 +132,7 @@ enum DiagnosticsDescriber {
         if let a = b.adapter { lines.append("Charger: \(a.name), negotiated \(a.watts) W.") }
         if let t = b.telemetry, b.externalConnected {
             lines.append(String(format: "Power: %.1f W in from charger, %.1f W running the Mac, %+.1f W into the battery, %.1f W lost as heat.",
-                                t.systemInput, t.systemLoad, t.battery, t.adapterLoss))
+                                t.systemInput, t.systemLoad, t.battery, max(0, t.adapterLoss)))
         } else if let w = b.watts {
             lines.append(String(format: "Battery power draw %.1f W.", abs(w)))
         }
