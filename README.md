@@ -2,6 +2,22 @@
 
 A native macOS app that checks the health of your Mac, explains what it finds in plain English, and helps you fix it.
 
+## Install
+
+Paste this in Terminal:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/manu-tech-code/DiagnoMac/HEAD/scripts/install.sh | bash
+```
+
+It downloads the latest release, checks that the app is signed by the project's
+certificate, installs it in Applications and opens it. Run it again any time to
+reinstall. After that, the app updates itself.
+
+Or download `DiagnoMac-<version>.dmg` from [Releases](https://github.com/manu-tech-code/DiagnoMac/releases) and drag
+DiagnoMac to Applications. A copy downloaded with a browser needs **Open Anyway** in System Settings › Privacy &
+Security the first time, because it's signed for development rather than notarized.
+
 ## Build and run
 
 Requirements: Xcode 16 or newer, macOS 15+, and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
