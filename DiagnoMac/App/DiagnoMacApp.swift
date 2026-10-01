@@ -19,6 +19,9 @@ struct DiagnoMacApp: App {
         .defaultLaunchBehavior(.presented)
         .restorationBehavior(.disabled)
         .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") { model.updates.checkForUpdates() }
+            }
             CommandGroup(after: .newItem) {
                 Button("Run Full Scan") { Task { await model.scan() } }
                     .keyboardShortcut("r", modifiers: [.command])
@@ -37,7 +40,7 @@ struct DiagnoMacApp: App {
         }
 
         Settings {
-            SettingsView().environment(loginItem)
+            SettingsView().environment(loginItem).environment(model)
         }
 
         MenuBarExtra(isInserted: $showMenuBarIcon) {

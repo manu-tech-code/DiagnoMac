@@ -41,6 +41,7 @@ final class AppModel {
     var banner: String?
 
     let intelligence = Intelligence()
+    let updates = UpdateService()
 
     var score: Int { FindingsEngine.score(findings) }
 
@@ -67,6 +68,11 @@ final class AppModel {
         }
         restartSampling()
         Task { await scan() }
+        updates.onBackgroundUpdate = { [weak self] version in
+            self?.show("DiagnoMac \(version) is available. Choose Update in the sidebar to install it.")
+        }
+        // After launch finishes: Sparkle schedules its daily check from here.
+        DispatchQueue.main.async { [weak self] in self?.updates.start() }
         #if DEBUG
         DebugCapture.runIfRequested(model: self)
         #endif

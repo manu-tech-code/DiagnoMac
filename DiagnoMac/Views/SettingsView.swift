@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(LoginItem.self) private var loginItem
+    @Environment(AppModel.self) private var model
     @AppStorage(Preferences.startInMenuBarKey) private var startInMenuBar = true
     @AppStorage(Preferences.showMenuBarIconKey) private var showMenuBarIcon = true
 
@@ -29,6 +30,22 @@ struct SettingsView: View {
                 }
             } header: {
                 Text("Login")
+            }
+
+            Section {
+                Toggle("Check for updates automatically", isOn: Binding(
+                    get: { model.updates.automaticallyChecks },
+                    set: { model.updates.automaticallyChecks = $0 }))
+                HStack {
+                    Text(model.updates.lastChecked.map { "Last checked \(Format.relative($0))" } ?? "Not checked yet")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Check Now") { model.updates.checkForUpdates() }
+                }
+                Text("Once a day DiagnoMac looks at its latest release on GitHub. Updates are signed, and checked before they're installed.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } header: {
+                Text("Updates")
             }
 
             Section {

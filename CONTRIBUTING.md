@@ -20,9 +20,34 @@ feat/… fix/… bug/… chore/…  ──PR──▶  develop  ──PR──�
 4. **The Release workflow** then creates `release/<version>`, the tag `v<version>` and a
    *draft* GitHub release. Its notes list the merged PRs under Features, Fixes and
    Chores, from the label each PR gets from its branch name. The update window shows
-   them as New, Fixes and Improvements.
+   them as New, Fixes and Improvements. To give the release a summary line, edit the
+   draft and add one sentence above the notes.
+5. **Attach the signed DMG and the appcast, and publish** from your Mac (assets can only be
+   added while the release is a draft):
+   ```sh
+   git fetch && git switch release/<version>
+   scripts/release.sh --upload
+   ```
+   Installed copies read `appcast.xml` from the latest release once a day (Sparkle)
+   and offer the update in the sidebar and the menu bar.
 
 Nobody can push directly to `main` or `develop`, force-push them or delete them.
+
+## The update key
+
+Updates are signed with an EdDSA key in your login Keychain (account
+`com.amalitech.DiagnoMac`); `SUPublicEDKey` in `project.yml` is its public half.
+Without the private key, installed copies can't be updated, so keep a backup
+somewhere safe, outside the repo:
+
+```sh
+build/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys --account com.amalitech.DiagnoMac -x ~/diagnomac-update-key
+```
+
+## Measuring
+
+`scripts/measure.sh <DiagnoMac.app> <page|menubar>` reports CPU, energy impact, idle
+wake-ups and memory the way performance PRs show them, before and after.
 
 ## Pull request descriptions
 

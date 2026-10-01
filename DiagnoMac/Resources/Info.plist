@@ -32,5 +32,15 @@
 	<string>© 2026 Emmanuel Larbi</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>DiagnoMac shows an input level meter so you can check that your microphone works. Audio is never recorded or sent anywhere.</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/manu-tech-code/DiagnoMac/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>1820xl8dN4SKhltFG+BUOjCM4heQqrsQ9d6YKqaStiI=</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
+	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
 </dict>
 </plist>

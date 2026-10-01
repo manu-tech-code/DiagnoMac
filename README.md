@@ -93,6 +93,14 @@ swift scripts/make-icon.swift
   `-captureDelay <seconds>`, `-captureAsk "<question>"` (also runs the Explain features) or `-captureSpeedTest`; a `dump.txt`
   with the AI output and report is written alongside.
 
+## Updates
+
+DiagnoMac updates itself with [Sparkle](https://sparkle-project.org). Once a day it reads `appcast.xml` from the latest
+GitHub release, checks the download's EdDSA signature, and installs on relaunch. **Check for Updates…** is in the
+DiagnoMac menu and in Settings. The update window shows a timeline of releases, built from their release notes.
+Development builds don't check the real feed; point one at a local appcast with
+`defaults write com.amalitech.DiagnoMac DebugFeedURL file:///…/appcast.xml`.
+
 ## Contributing and releases
 
 `develop` is the default branch; changes reach it through pull requests from `feat/`, `fix/`, `chore/` and similar
