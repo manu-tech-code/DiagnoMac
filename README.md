@@ -93,6 +93,12 @@ swift scripts/make-icon.swift
   `-captureDelay <seconds>`, `-captureAsk "<question>"` (also runs the Explain features) or `-captureSpeedTest`; a `dump.txt`
   with the AI output and report is written alongside.
 
+## Contributing and releases
+
+`develop` is the default branch; changes reach it through pull requests from `feat/`, `fix/`, `chore/` and similar
+branches, and `main` only through a pull request from `develop`. Merging into `main` drafts the GitHub release.
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Project layout
 
 ```
@@ -102,4 +108,7 @@ DiagnoMac/
   Services/   One collector per area, samplers (CPU, GPU, apps), speed test runner, Intelligence (Foundation Models),
               FindingsEngine, DiagnosticsDescriber, HistoryStore, ReportBuilder, Shell, Sysctl
   Views/      RootView, MenuBarView, SettingsView, Components/, Sections/ (one view per area)
+Packages/DiagnoKit/   UI-free logic with tests (release notes, networkQuality parsing): `swift test`
+.github/              PR rules, tests, and the Release workflow
+scripts/ci/           What the workflows run
 ```

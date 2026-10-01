@@ -195,13 +195,6 @@ struct NetworkInfo: Sendable {
     var checks: [NetworkCheck]
 }
 
-struct SpeedTestResult: Sendable {
-    var downloadMbps: Double
-    var uploadMbps: Double
-    var responsivenessRPM: Int?
-    var idleLatencyMs: Double?
-}
-
 struct SecurityCheck: Identifiable, Sendable {
     let id: String
     let title: String

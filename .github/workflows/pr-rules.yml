@@ -1,0 +1,38 @@
+name: PR rules
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+    branches: [main, develop]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  rules:
+    name: Branch rules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check source branch and version
+        env:
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          REPO: ${{ github.repository }}
+        run: scripts/ci/check-pr.sh
+      - name: Label for release notes
+        continue-on-error: true
+        env:
+          HEAD: ${{ github.head_ref }}
+          PR: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          case "$HEAD" in
+            feat/*) label=feature ;;
+            fix/*|bug/*) label=fix ;;
+            develop) label=release ;;
+            *) label=chore ;;
+          esac
+          gh pr edit "$PR" --add-label "$label"

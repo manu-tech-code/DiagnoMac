@@ -1,3 +1,4 @@
+import DiagnoCore
 import Foundation
 
 // Value types for the readings that update continuously (GPU, apps, charging, speed test)
