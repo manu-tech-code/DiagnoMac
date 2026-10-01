@@ -14,6 +14,10 @@ struct DiagnoMacApp: App {
                 .frame(minWidth: 880, minHeight: 600)
         }
         .defaultSize(width: 1180, height: 780)
+        // Always open the window when DiagnoMac is opened, even if it was closed last time;
+        // a login launch closes it again in AppDelegate.
+        .defaultLaunchBehavior(.presented)
+        .restorationBehavior(.disabled)
         .commands {
             CommandGroup(after: .newItem) {
                 Button("Run Full Scan") { Task { await model.scan() } }
