@@ -1,0 +1,19 @@
+name: Tests
+
+on:
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    name: Core tests
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: swift test
+        working-directory: Packages/DiagnoKit
+        run: swift test

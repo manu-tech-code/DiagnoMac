@@ -1,4 +1,5 @@
 import Darwin
+import DiagnoCore
 import Foundation
 
 /// Runs Apple's networkQuality tool and streams its live readings.
@@ -49,7 +50,7 @@ final class SpeedTestRunner: @unchecked Sendable {
             DispatchQueue.global(qos: .userInitiated).async {
                 var pending = ""
                 var summary: [String] = []
-                var last: (Double, Double, Int) = (0, 0, 0)
+                var last: SpeedTestReading?
                 var buffer = [UInt8](repeating: 0, count: 4096)
 
                 while true {
@@ -60,11 +61,11 @@ final class SpeedTestRunner: @unchecked Sendable {
                     let pieces = pending.components(separatedBy: CharacterSet(charactersIn: "\r\n"))
                     pending = pieces.last ?? ""
                     for raw in pieces.dropLast() {
-                        let line = Self.stripEscapes(raw).trimmingCharacters(in: .whitespaces)
+                        let line = SpeedTestParser.stripEscapes(raw).trimmingCharacters(in: .whitespaces)
                         guard !line.isEmpty else { continue }
-                        if let p = Self.parseProgress(line) {
-                            last = p
-                            continuation.yield(.progress(downMbps: p.0, upMbps: p.1, rpm: p.2))
+                        if let reading = SpeedTestParser.progress(line) {
+                            last = reading
+                            continuation.yield(.progress(downMbps: reading.downloadMbps, upMbps: reading.uploadMbps, rpm: reading.rpm))
                         } else {
                             summary.append(line)
                         }
@@ -75,11 +76,11 @@ final class SpeedTestRunner: @unchecked Sendable {
 
                 if process.terminationReason == .uncaughtSignal {
                     continuation.yield(.failed("Speed test cancelled."))
-                } else if process.terminationStatus != 0 && last.0 == 0 {
+                } else if process.terminationStatus != 0 && (last?.downloadMbps ?? 0) == 0 {
                     let message = summary.last ?? "networkQuality exited with status \(process.terminationStatus)."
                     continuation.yield(.failed(message))
                 } else {
-                    continuation.yield(.finished(Self.parseSummary(summary, fallback: last)))
+                    continuation.yield(.finished(SpeedTestParser.summary(summary, fallback: last)))
                 }
                 continuation.finish()
             }
@@ -91,44 +92,5 @@ final class SpeedTestRunner: @unchecked Sendable {
             if let process, process.isRunning { process.terminate() }
             process = nil
         }
-    }
-
-    // MARK: Parsing
-
-    private static func stripEscapes(_ text: String) -> String {
-        text.replacingOccurrences(of: #"\u{1B}\[[0-9;?]*[A-Za-z]"#, with: "", options: .regularExpression)
-            .replacingOccurrences(of: "^D", with: "")
-    }
-
-    /// "Downlink: 76.672 Mbps, 262 RPM - Uplink: 28.754 Mbps, 0 RPM"
-    static func parseProgress(_ line: String) -> (Double, Double, Int)? {
-        let pattern = #"Downlink: ([\d.]+) Mbps, (\d+) RPM - Uplink: ([\d.]+) Mbps, (\d+) RPM"#
-        guard let regex = try? NSRegularExpression(pattern: pattern),
-              let m = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) else { return nil }
-        func group(_ i: Int) -> String { (Range(m.range(at: i), in: line).map { String(line[$0]) }) ?? "0" }
-        let rpm = max(Int(group(2)) ?? 0, Int(group(4)) ?? 0)
-        return (Double(group(1)) ?? 0, Double(group(3)) ?? 0, rpm)
-    }
-
-    /// Reads "Downlink capacity: 48.669 Mbps", "Uplink capacity: …", "Downlink Responsiveness: Medium (237.730 milliseconds | 252 RPM)",
-    /// "Idle Latency: 180.484 milliseconds | 332 RPM".
-    static func parseSummary(_ lines: [String], fallback: (Double, Double, Int)) -> SpeedTestResult? {
-        func number(after prefix: String, unit: String) -> Double? {
-            guard let line = lines.first(where: { $0.hasPrefix(prefix) }),
-                  let range = line.range(of: #"[\d.]+(?= \#(unit))"#, options: .regularExpression) else { return nil }
-            return Double(line[range])
-        }
-        func rpm(after prefix: String) -> Int? {
-            guard let line = lines.first(where: { $0.hasPrefix(prefix) }),
-                  let range = line.range(of: #"\d+(?= RPM)"#, options: .regularExpression) else { return nil }
-            return Int(line[range])
-        }
-        let down = number(after: "Downlink capacity", unit: "Mbps") ?? fallback.0
-        let up = number(after: "Uplink capacity", unit: "Mbps") ?? fallback.1
-        guard down > 0 || up > 0 else { return nil }
-        let responsiveness = rpm(after: "Downlink Responsiveness") ?? rpm(after: "Responsiveness")
-            ?? rpm(after: "Uplink Responsiveness") ?? (fallback.2 > 0 ? fallback.2 : nil)
-        return SpeedTestResult(downloadMbps: down, uploadMbps: up, responsivenessRPM: responsiveness,
-                               idleLatencyMs: number(after: "Idle Latency", unit: "milliseconds"))
     }
 }

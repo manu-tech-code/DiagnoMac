@@ -1,4 +1,5 @@
 import Charts
+import DiagnoCore
 import SwiftUI
 
 struct NetworkView: View {

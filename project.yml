@@ -4,6 +4,10 @@ options:
   deploymentTarget:
     macOS: "15.0"
   createIntermediateGroups: true
+packages:
+  DiagnoKit:
+    path: Packages/DiagnoKit
+
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -18,6 +22,9 @@ targets:
     platform: macOS
     sources:
       - path: DiagnoMac
+    dependencies:
+      - package: DiagnoKit
+        product: DiagnoCore
     info:
       path: DiagnoMac/Resources/Info.plist
       properties:
