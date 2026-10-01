@@ -27,8 +27,9 @@ struct AssistantView: View {
             }
 
             HStack(alignment: .top, spacing: 18) {
-                if ai.isAvailable { chat } else { unavailable }
-                infoCard.frame(width: 270)
+                if ai.isAvailable { chat } else { unavailable.fixedSize(horizontal: false, vertical: true) }
+                // Its own height, not the chat's.
+                infoCard.frame(width: 270).fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(28)

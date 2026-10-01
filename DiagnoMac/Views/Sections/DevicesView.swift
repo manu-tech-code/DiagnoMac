@@ -8,7 +8,7 @@ struct DevicesView: View {
             Button("Refresh") { Task { await model.refresh(.devices) } }
         } content: {
             if let devices = model.snapshot.devices {
-                HStack(alignment: .top, spacing: 14) {
+                CardRow {
                     bluetoothCard(devices)
                     VStack(spacing: 14) {
                         displaysCard

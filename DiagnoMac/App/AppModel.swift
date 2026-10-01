@@ -1,13 +1,17 @@
 import AppKit
 import Foundation
+import IOKit.ps
 import Observation
 
 /// Owns the latest scan, the live readings and the actions the UI can trigger.
 @MainActor
 @Observable
 final class AppModel {
-    var selection: Area? = .overview
-    var snapshot = DiagnosticsSnapshot()
+    var selection: Area? = .overview {
+        didSet { if oldValue != selection { restartSampling() } }
+    }
+    /// Observed per section, so a view that shows the battery only updates when the battery does.
+    let snapshot = LiveSnapshot()
     var findings: [Finding] = []
     var history: [HistoryEntry] = HistoryStore.load()
 
@@ -16,12 +20,12 @@ final class AppModel {
     var scanStatus = ""
     var lastScan: Date?
 
-    /// Live CPU samples, newest last, one per second.
+    /// Live CPU samples, newest last, one per second while something shows them.
     var cpuHistory: [Double] = []
     var cpuNow: CPULoad?
-    /// Live GPU utilization samples, newest last, one every 2 seconds.
+    /// Live GPU utilization samples, newest last.
     var gpuHistory: [Double] = []
-    /// Charger and battery power, one sample every 2 seconds for the last 10 minutes.
+    /// Charger and battery power for the last 10 minutes the Battery page was open.
     var powerHistory: [PowerSample] = []
     var chargeSessions: [ChargeSession] = ChargeLogStore.load().map { session in
         // A session still open from a previous run ended when the app last saw it.
@@ -46,10 +50,22 @@ final class AppModel {
     private var speedRunner: SpeedTestRunner?
     private var liveTask: Task<Void, Never>?
     private var bannerTask: Task<Void, Never>?
+    private var powerSourceObserver: PowerSourceObserver?
+    /// The scan the Overview's summary describes.
+    private var summaryScan: Date?
 
     init() {
-        intelligence.context = { [unowned self] in (self.snapshot, self.findings) }
-        startLiveSampling()
+        // `-openPage battery` opens on a page (used by scripts/measure.sh).
+        let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "-openPage"), i + 1 < args.count, let area = Area(rawValue: args[i + 1]) {
+            selection = area
+        }
+        intelligence.context = { [unowned self] in (self.snapshot.value, self.findings) }
+        // Plugging in or unplugging the charger is reported straight away, without polling.
+        powerSourceObserver = PowerSourceObserver { [weak self] in
+            Task { await self?.sampleBattery() }
+        }
+        restartSampling()
         Task { await scan() }
         #if DEBUG
         DebugCapture.runIfRequested(model: self)
@@ -58,6 +74,12 @@ final class AppModel {
 
     func severity(for area: Area) -> Severity {
         FindingsEngine.worstSeverity(in: area, findings)
+    }
+
+    /// Replaces the findings only when they changed, so views that show them don't redraw for nothing.
+    private func updateFindings() {
+        let new = FindingsEngine.findings(for: snapshot.value)
+        if new != findings { findings = new }
     }
 
     // MARK: Scanning
@@ -69,7 +91,7 @@ final class AppModel {
         stepsDone += 1
         scanProgress = stepsDone / totalSteps
         scanStatus = "Checked \(name)"
-        findings = FindingsEngine.findings(for: snapshot)
+        updateFindings()
     }
 
     func scan() async {
@@ -82,7 +104,7 @@ final class AppModel {
 
         snapshot.memory = MemoryCollector.collect()
         step("memory")
-        snapshot.gpu = gpuSampler.sample()
+        sampleGPU(processes: false)
         snapshot.apps = await appsSampler.sample()
         step("apps")
 
@@ -103,7 +125,7 @@ final class AppModel {
             group.addTask { let v = await DevicesCollector.collect(); await MainActor.run { self.snapshot.devices = v; self.step("devices") } }
         }
 
-        findings = FindingsEngine.findings(for: snapshot)
+        updateFindings()
         lastScan = Date()
         isScanning = false
         scanStatus = "Scan complete"
@@ -112,8 +134,8 @@ final class AppModel {
             batteryHealth: snapshot.battery?.healthPercent, cycleCount: snapshot.battery?.cycleCount,
             freeBytes: snapshot.storage?.availableBytes, swapUsedBytes: snapshot.memory?.swapUsed))
 
-        intelligence.generate(key: "summary", instructions: AIPrompts.summaryInstructions,
-                              prompt: AIPrompts.summary(snapshot: snapshot, findings: findings), force: true)
+        // The summary is written only when someone is looking at it.
+        if isWindowVisible && selection == .overview { ensureSummary() }
     }
 
     func refresh(_ area: Area) async {
@@ -139,32 +161,111 @@ final class AppModel {
         case .overview, .report: await scan()
         case .hardware, .assistant: break
         }
-        findings = FindingsEngine.findings(for: snapshot)
+        updateFindings()
     }
 
     // MARK: Live sampling
 
-    private func startLiveSampling() {
-        _ = cpuSampler.sample() // prime the baselines
-        _ = gpuSampler.sample()
-        liveTask = Task { [weak self] in
-            var tick = 0
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1))
-                guard let self else { return }
-                tick += 1
-                self.sampleCPU()
-                if tick % 2 == 0 {
-                    self.sampleGPU()
-                    await self.sampleBattery()
-                }
-                if tick % 5 == 0 {
-                    self.snapshot.memory = MemoryCollector.collect()
-                    self.snapshot.apps = await self.appsSampler.sample()
-                    self.checkQuitRequests()
-                    if !self.isScanning { self.findings = FindingsEngine.findings(for: self.snapshot) }
-                }
+    /// The main window is open and not hidden behind other windows.
+    private(set) var isWindowVisible = false
+    /// The menu bar panel is open.
+    private(set) var isMenuBarPanelVisible = false
+
+    func setWindowVisible(_ visible: Bool) {
+        guard visible != isWindowVisible else { return }
+        isWindowVisible = visible
+        restartSampling()
+    }
+
+    func setMenuBarPanelVisible(_ visible: Bool) {
+        guard visible != isMenuBarPanelVisible else { return }
+        isMenuBarPanelVisible = visible
+        restartSampling()
+    }
+
+    private enum Sampler: CaseIterable { case cpu, gpu, battery, memory, apps }
+
+    /// How often each reading is taken, from what's on screen. Nil means not at all.
+    private struct Schedule {
+        var cpu: Duration?
+        var gpu: Duration?
+        var gpuProcesses: Bool
+        var battery: Duration
+        var memory: Duration
+        var apps: Duration
+
+        func interval(for sampler: Sampler) -> Duration? {
+            switch sampler {
+            case .cpu: cpu
+            case .gpu: gpu
+            case .battery: battery
+            case .memory: memory
+            case .apps: apps
             }
+        }
+    }
+
+    private var schedule: Schedule {
+        let page = isWindowVisible ? selection : nil
+        let anyVisible = isWindowVisible || isMenuBarPanelVisible
+        let showsCPU = isMenuBarPanelVisible || page == .overview || page == .performance
+        let showsApps = isMenuBarPanelVisible || page == .overview || page == .apps || page == .memory
+        return Schedule(
+            cpu: showsCPU ? .seconds(1) : nil,
+            gpu: page == .performance ? .seconds(2) : (showsCPU ? .seconds(4) : nil),
+            gpuProcesses: page == .performance,
+            // In the background the charger's plug and unplug events still arrive straight away.
+            battery: page == .battery ? .seconds(2) : (anyVisible ? .seconds(10) : .seconds(120)),
+            memory: anyVisible ? .seconds(5) : .seconds(60),
+            apps: showsApps ? .seconds(5) : .seconds(60))
+    }
+
+    private var lastRun: [Sampler: ContinuousClock.Instant] = [:]
+
+    /// Starts the sampling loop again with the schedule for what's on screen now.
+    private func restartSampling() {
+        liveTask?.cancel()
+        // Measure CPU from now on, rather than averaging over the time nothing showed it.
+        if schedule.cpu != nil && lastRun[.cpu].map({ ContinuousClock.now - $0 > .seconds(3) }) ?? true {
+            _ = cpuSampler.sample()
+            lastRun[.cpu] = .now
+        }
+        liveTask = Task { [weak self] in await self?.samplingLoop() }
+    }
+
+    private func samplingLoop() async {
+        let clock = ContinuousClock()
+        while !Task.isCancelled {
+            let plan = schedule
+            var nextWake = clock.now + .seconds(120)
+            for sampler in Sampler.allCases {
+                guard let interval = plan.interval(for: sampler) else { continue }
+                if let last = lastRun[sampler], clock.now - last < interval {
+                    nextWake = min(nextWake, last + interval)
+                    continue
+                }
+                await run(sampler, plan: plan)
+                lastRun[sampler] = clock.now
+                nextWake = min(nextWake, clock.now + interval)
+            }
+            // Tolerance lets macOS group these wake-ups with others, which saves battery.
+            let shortest = Sampler.allCases.compactMap { plan.interval(for: $0) }.min() ?? .seconds(60)
+            try? await clock.sleep(until: nextWake, tolerance: shortest / 10)
+        }
+    }
+
+    private func run(_ sampler: Sampler, plan: Schedule) async {
+        switch sampler {
+        case .cpu: sampleCPU()
+        case .gpu: sampleGPU(processes: plan.gpuProcesses)
+        case .battery: await sampleBattery()
+        case .memory:
+            snapshot.memory = MemoryCollector.collect()
+            if !isScanning { updateFindings() }
+        case .apps:
+            snapshot.apps = await appsSampler.sample()
+            checkQuitRequests()
+            if !isScanning { updateFindings() }
         }
     }
 
@@ -175,8 +276,10 @@ final class AppModel {
         if cpuHistory.count > 120 { cpuHistory.removeFirst(cpuHistory.count - 120) }
     }
 
-    private func sampleGPU() {
-        guard let gpu = gpuSampler.sample() else { return }
+    private func sampleGPU(processes: Bool) {
+        guard var gpu = gpuSampler.sample(includeProcesses: processes) else { return }
+        // Per-app GPU use is only measured while the CPU & GPU page is open; keep the last reading.
+        if !processes { gpu.processes = snapshot.gpu?.processes ?? [] }
         snapshot.gpu = gpu
         gpuHistory.append(Double(gpu.deviceUtilization) / 100)
         if gpuHistory.count > 90 { gpuHistory.removeFirst(gpuHistory.count - 90) }
@@ -189,7 +292,7 @@ final class AppModel {
         if merged.condition == nil { merged.condition = snapshot.battery?.condition }
         snapshot.battery = merged
 
-        if let t = merged.telemetry {
+        if let t = merged.telemetry, isWindowVisible && selection == .battery {
             powerHistory.append(PowerSample(date: Date(), input: t.systemInput, battery: t.battery, system: t.systemLoad))
             if powerHistory.count > 300 { powerHistory.removeFirst(powerHistory.count - 300) }
         }
@@ -204,7 +307,7 @@ final class AppModel {
         case (true, nil):
             chargeSessions.append(ChargeSession(start: Date(), adapterName: battery.adapter?.name, adapterWatts: battery.adapter?.watts,
                                                 startPercent: battery.chargePercent, peakWatts: power,
-                                                startedBeforeLaunch: lastScan == nil && powerHistory.count <= 1))
+                                                startedBeforeLaunch: lastScan == nil))
             ChargeLogStore.save(chargeSessions)
         case (true, let index?):
             chargeSessions[index].lastSeen = Date()
@@ -259,6 +362,7 @@ final class AppModel {
     }
 
     private func checkQuitRequests() {
+        guard !quitRequests.isEmpty else { return }
         quitRequests = quitRequests.filter { AppsSampler.isRunning(pid: $0.key) }
     }
 
@@ -349,9 +453,24 @@ final class AppModel {
 
     // MARK: Apple Intelligence
 
+    /// Writes the Overview's summary for the latest scan, once, when the Overview is on screen.
+    func ensureSummary() {
+        intelligence.checkAvailabilityIfNeeded()
+        guard intelligence.isAvailable, let scanned = lastScan, summaryScan != scanned else { return }
+        summaryScan = scanned
+        let value = snapshot.value
+        intelligence.generate(key: "summary", instructions: AIPrompts.summaryInstructions,
+                              prompt: AIPrompts.summary(snapshot: value, findings: findings), force: true)
+    }
+
+    func regenerateSummary() {
+        summaryScan = nil
+        ensureSummary()
+    }
+
     func explain(_ finding: Finding) {
         intelligence.generate(key: "finding.\(finding.id)", instructions: AIPrompts.explainInstructions,
-                              prompt: AIPrompts.finding(finding, snapshot: snapshot, findings: findings))
+                              prompt: AIPrompts.finding(finding, snapshot: snapshot.value, findings: findings))
     }
 
     func explain(_ item: StartupItem) {
@@ -378,5 +497,31 @@ final class AppModel {
         }
     }
 
-    var reportText: String { ReportBuilder.text(snapshot: snapshot, findings: findings) }
+    var reportText: String { ReportBuilder.text(snapshot: snapshot.value, findings: findings) }
+}
+
+/// Calls back on the main thread whenever macOS reports a power source change: the charger
+/// connected or removed, or the charge level changing.
+@MainActor
+final class PowerSourceObserver {
+    private var source: CFRunLoopSource?
+    private let onChange: @MainActor () -> Void
+
+    /// Lives as long as the app, so the run loop source is never removed.
+    init(onChange: @escaping @MainActor () -> Void) {
+        self.onChange = onChange
+        let context = Unmanaged.passUnretained(self).toOpaque()
+        source = IOPSNotificationCreateRunLoopSource(Self.callback, context)?.takeRetainedValue()
+        if let source { CFRunLoopAddSource(CFRunLoopGetMain(), source, .defaultMode) }
+    }
+
+    /// Runs on the main run loop, where the source was added.
+    private nonisolated static let callback: IOPowerSourceCallbackType = { context in
+        // The address is a plain number, which can cross to the main actor safely.
+        guard let address = context.map({ UInt(bitPattern: $0) }) else { return }
+        MainActor.assumeIsolated {
+            guard let pointer = UnsafeRawPointer(bitPattern: address) else { return }
+            Unmanaged<PowerSourceObserver>.fromOpaque(pointer).takeUnretainedValue().onChange()
+        }
+    }
 }

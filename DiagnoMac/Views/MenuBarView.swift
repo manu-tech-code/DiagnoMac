@@ -87,6 +87,8 @@ struct MenuBarView: View {
         }
         .padding(16)
         .frame(width: 320)
+        .onAppear { model.setMenuBarPanelVisible(true) }
+        .onDisappear { model.setMenuBarPanelVisible(false) }
     }
 
     private var summary: String {

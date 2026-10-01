@@ -12,7 +12,7 @@ struct BatteryView: View {
                 hero(b)
 
                 if b.externalConnected, let t = b.telemetry {
-                    HStack(alignment: .top, spacing: 14) {
+                    CardRow {
                         Card("Power flow", trailing: "Live from the battery controller") {
                             PowerFlowView(telemetry: t, charging: b.isCharging)
                             Text(flowNote(b, t)).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -46,7 +46,7 @@ struct BatteryView: View {
                     }
                 }
 
-                HStack(alignment: .top, spacing: 14) {
+                CardRow {
                     capacityCard(b)
                     historyCard
                 }
@@ -107,7 +107,7 @@ struct BatteryView: View {
     }
 
     private func flowNote(_ b: BatteryInfo, _ t: PowerTelemetry) -> String {
-        var note = String(format: "%.1f W is lost as heat converting the charger's power.", t.adapterLoss)
+        var note = String(format: "%.1f W is lost as heat converting the charger's power.", max(0, t.adapterLoss))
         if let a = b.adapter, t.systemInput > Double(a.watts) * 0.9 {
             note += " The charger is close to its limit. A higher-wattage charger would charge faster."
         } else if let a = b.adapter {
@@ -240,7 +240,7 @@ struct BatteryGlyph: View {
                     }
                     .frame(width: max(8, (shell.width - 12) * CGFloat(percent) / 100), height: shell.height - 12)
                     .offset(x: 6)
-                    .animation(.easeOut(duration: 0.6), value: percent)
+                    .animation(.smooth(duration: 0.9), value: percent)
 
                 if charging {
                     Image(systemName: "bolt.fill")
@@ -256,86 +256,209 @@ struct BatteryGlyph: View {
     }
 }
 
-/// Diagonal stripes that slide to the right, like current flowing in.
-private struct ChargingStripes: View {
-    var body: some View {
-        TimelineView(.animation) { timeline in
-            Canvas { context, size in
-                let spacing: CGFloat = 22
-                let offset = CGFloat(timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.1) / 1.1) * spacing
-                var x = -size.height + offset - spacing
-                while x < size.width + spacing {
-                    var stripe = Path()
-                    stripe.move(to: CGPoint(x: x, y: size.height))
-                    stripe.addLine(to: CGPoint(x: x + size.height * 0.6, y: 0))
-                    stripe.addLine(to: CGPoint(x: x + size.height * 0.6 + 9, y: 0))
-                    stripe.addLine(to: CGPoint(x: x + 9, y: size.height))
-                    stripe.closeSubpath()
-                    context.fill(stripe, with: .color(.white.opacity(0.28)))
-                    x += spacing
-                }
-            }
+/// Diagonal stripes that slide to the right, like current flowing in. Core Animation moves them
+/// at up to 60 fps, so the app does no work per frame.
+private struct ChargingStripes: NSViewRepresentable {
+    func makeNSView(context: Context) -> StripesView { StripesView() }
+    func updateNSView(_ view: StripesView, context: Context) {}
+
+    final class StripesView: NSView {
+        private let replicator = CAReplicatorLayer()
+        private let stripe = CALayer()
+        private static let spacing: CGFloat = 22
+
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            wantsLayer = true
+            layer?.masksToBounds = true
+            stripe.backgroundColor = NSColor.white.withAlphaComponent(0.28).cgColor
+            replicator.addSublayer(stripe)
+            layer?.addSublayer(replicator)
+        }
+
+        required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+        override func layout() {
+            super.layout()
+            let spacing = Self.spacing, h = bounds.height
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            replicator.frame = CGRect(x: -spacing * 2, y: 0, width: bounds.width + spacing * 4, height: h)
+            replicator.instanceCount = Int(replicator.frame.width / spacing) + 2
+            replicator.instanceTransform = CATransform3DMakeTranslation(spacing, 0, 0)
+            stripe.bounds = CGRect(x: 0, y: 0, width: 9, height: h * 2)
+            stripe.position = CGPoint(x: 0, y: h / 2)
+            stripe.setAffineTransform(CGAffineTransform(rotationAngle: -0.55))
+            CATransaction.commit()
+
+            guard replicator.animation(forKey: "slide") == nil else { return }
+            let slide = CABasicAnimation(keyPath: "transform.translation.x")
+            slide.fromValue = 0
+            slide.toValue = spacing
+            slide.duration = 1.1
+            slide.repeatCount = .infinity
+            slide.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 120, preferred: 60)
+            replicator.add(slide, forKey: "slide")
         }
     }
 }
 
 // MARK: - Power flow
 
-/// Charger → Mac → (running the Mac, into the battery), with animated current.
+/// Charger → Mac → (running the Mac, into the battery). The diagram is drawn once per reading;
+/// the moving current on top is Core Animation, at up to 60 fps.
 struct PowerFlowView: View {
     let telemetry: PowerTelemetry
     let charging: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// Wire geometry in the diagram's 420 × 200 design space.
+    fileprivate static let input = FlowWire.line(from: CGPoint(x: 120, y: 100), to: CGPoint(x: 170, y: 100))
+    fileprivate static let system = FlowWire.curve(from: CGPoint(x: 200, y: 100), c1: CGPoint(x: 240, y: 100),
+                                                   c2: CGPoint(x: 250, y: 45), to: CGPoint(x: 290, y: 45))
+    fileprivate static let battery = FlowWire.curve(from: CGPoint(x: 200, y: 100), c1: CGPoint(x: 240, y: 100),
+                                                    c2: CGPoint(x: 250, y: 155), to: CGPoint(x: 290, y: 155))
+
     var body: some View {
-        TimelineView(.animation(paused: reduceMotion)) { timeline in
-            Canvas { context, size in
-                let s = size.width / 420
-                func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * s, y: y * s) }
-                let phase = reduceMotion ? 0 : -CGFloat(timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1) * 14) * s
+        Canvas { context, size in
+            let s = size.width / 420
+            func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * s, y: y * s) }
 
-                var input = Path(); input.move(to: p(120, 100)); input.addLine(to: p(170, 100))
-                var system = Path(); system.move(to: p(200, 100)); system.addCurve(to: p(290, 45), control1: p(240, 100), control2: p(250, 45))
-                var battery = Path(); battery.move(to: p(200, 100)); battery.addCurve(to: p(290, 155), control1: p(240, 100), control2: p(250, 155))
+            func wire(_ shape: FlowWire, watts: Double) {
+                let width = max(3, min(18, CGFloat(watts) / 3)) * s
+                context.stroke(shape.path(scale: s), with: .color(.secondary.opacity(0.18)), style: StrokeStyle(lineWidth: width, lineCap: .round))
+            }
+            wire(Self.input, watts: telemetry.systemInput)
+            wire(Self.system, watts: telemetry.systemLoad)
+            wire(Self.battery, watts: max(0, telemetry.battery))
 
-                func wire(_ path: Path, watts: Double, color: Color) {
-                    let width = max(3, min(18, CGFloat(watts) / 3)) * s
-                    context.stroke(path, with: .color(.secondary.opacity(0.18)), style: StrokeStyle(lineWidth: width, lineCap: .round))
-                    if watts > 0.5 {
-                        context.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: 3 * s, lineCap: .round, dash: [2 * s, 12 * s], dashPhase: phase))
-                    }
-                }
-                wire(input, watts: telemetry.systemInput, color: .accentColor)
-                wire(system, watts: telemetry.systemLoad, color: .accentColor)
-                wire(battery, watts: max(0, telemetry.battery), color: .green)
+            func box(_ rect: CGRect, fill: Color, stroke: Color, title: String, value: String, valueColor: Color = .primary) {
+                let r = CGRect(x: rect.minX * s, y: rect.minY * s, width: rect.width * s, height: rect.height * s)
+                let shape = Path(roundedRect: r, cornerRadius: 10 * s)
+                context.fill(shape, with: .color(fill))
+                context.stroke(shape, with: .color(stroke), lineWidth: 1)
+                context.draw(Text(title).font(.system(size: 11 * s)).foregroundStyle(.secondary), at: CGPoint(x: r.midX, y: r.minY + 22 * s))
+                context.draw(Text(value).font(.system(size: 18 * s, design: .monospaced)).foregroundStyle(valueColor),
+                             at: CGPoint(x: r.midX, y: r.minY + r.height * 0.66))
+            }
+            box(CGRect(x: 6, y: 66, width: 114, height: 68), fill: .secondary.opacity(0.08), stroke: .secondary.opacity(0.25),
+                title: "Charger", value: String(format: "%.1f W", telemetry.systemInput))
+            box(CGRect(x: 290, y: 14, width: 124, height: 62), fill: .secondary.opacity(0.08), stroke: .secondary.opacity(0.25),
+                title: "Running the Mac", value: String(format: "%.1f W", telemetry.systemLoad))
+            box(CGRect(x: 290, y: 124, width: 124, height: 62), fill: .green.opacity(charging ? 0.12 : 0.05), stroke: .green.opacity(0.35),
+                title: charging ? "Into the battery" : "Battery (not charging)",
+                value: String(format: "%+.1f W", telemetry.battery), valueColor: charging ? .green : .secondary)
 
-                func box(_ rect: CGRect, fill: Color, stroke: Color, title: String, value: String, valueColor: Color = .primary) {
-                    let r = CGRect(x: rect.minX * s, y: rect.minY * s, width: rect.width * s, height: rect.height * s)
-                    let shape = Path(roundedRect: r, cornerRadius: 10 * s)
-                    context.fill(shape, with: .color(fill))
-                    context.stroke(shape, with: .color(stroke), lineWidth: 1)
-                    context.draw(Text(title).font(.system(size: 11 * s)).foregroundStyle(.secondary), at: CGPoint(x: r.midX, y: r.minY + 22 * s))
-                    context.draw(Text(value).font(.system(size: 18 * s, design: .monospaced)).foregroundStyle(valueColor),
-                                 at: CGPoint(x: r.midX, y: r.minY + r.height * 0.66))
-                }
-                box(CGRect(x: 6, y: 66, width: 114, height: 68), fill: .secondary.opacity(0.08), stroke: .secondary.opacity(0.25),
-                    title: "Charger", value: String(format: "%.1f W", telemetry.systemInput))
-                box(CGRect(x: 290, y: 14, width: 124, height: 62), fill: .secondary.opacity(0.08), stroke: .secondary.opacity(0.25),
-                    title: "Running the Mac", value: String(format: "%.1f W", telemetry.systemLoad))
-                box(CGRect(x: 290, y: 124, width: 124, height: 62), fill: .green.opacity(charging ? 0.12 : 0.05), stroke: .green.opacity(0.35),
-                    title: charging ? "Into the battery" : "Battery (not charging)",
-                    value: String(format: "%+.1f W", telemetry.battery), valueColor: charging ? .green : .secondary)
-
-                let hub = Path(ellipseIn: CGRect(x: 170 * s, y: 85 * s, width: 30 * s, height: 30 * s))
-                context.fill(hub, with: .color(Color(nsColor: .windowBackgroundColor)))
-                context.stroke(hub, with: .color(.secondary.opacity(0.35)), lineWidth: 1)
-                context.draw(Text("Mac").font(.system(size: 10 * s)).foregroundStyle(.secondary), at: p(185, 100))
+            let hub = Path(ellipseIn: CGRect(x: 170 * s, y: 85 * s, width: 30 * s, height: 30 * s))
+            context.fill(hub, with: .color(Color(nsColor: .windowBackgroundColor)))
+            context.stroke(hub, with: .color(.secondary.opacity(0.35)), lineWidth: 1)
+            context.draw(Text("Mac").font(.system(size: 10 * s)).foregroundStyle(.secondary), at: p(185, 100))
+        }
+        .overlay {
+            if !reduceMotion {
+                FlowCurrent(wires: [
+                    .init(shape: Self.input, color: .controlAccentColor, active: telemetry.systemInput > 0.5),
+                    .init(shape: Self.system, color: .controlAccentColor, active: telemetry.systemLoad > 0.5),
+                    .init(shape: Self.battery, color: .systemGreen, active: telemetry.battery > 0.5),
+                ])
+                .allowsHitTesting(false)
             }
         }
         .aspectRatio(420 / 200, contentMode: .fit)
         .accessibilityElement()
         .accessibilityLabel(String(format: "Charger supplies %.1f watts: %.1f to run the Mac and %.1f into the battery.",
                                    telemetry.systemInput, telemetry.systemLoad, telemetry.battery))
+    }
+}
+
+/// A wire in the diagram's 420 × 200 design space.
+fileprivate enum FlowWire: Equatable {
+    case line(from: CGPoint, to: CGPoint)
+    case curve(from: CGPoint, c1: CGPoint, c2: CGPoint, to: CGPoint)
+
+    func path(scale s: CGFloat) -> Path { Path(cgPath(scale: s)) }
+
+    func cgPath(scale s: CGFloat) -> CGPath {
+        let path = CGMutablePath()
+        func p(_ point: CGPoint) -> CGPoint { CGPoint(x: point.x * s, y: point.y * s) }
+        switch self {
+        case .line(let from, let to):
+            path.move(to: p(from)); path.addLine(to: p(to))
+        case .curve(let from, let c1, let c2, let to):
+            path.move(to: p(from)); path.addCurve(to: p(to), control1: p(c1), control2: p(c2))
+        }
+        return path
+    }
+}
+
+/// Dashes that travel along each active wire, animated by Core Animation.
+private struct FlowCurrent: NSViewRepresentable {
+    struct Wire: Equatable {
+        let shape: FlowWire
+        let color: NSColor
+        let active: Bool
+    }
+
+    let wires: [Wire]
+
+    func makeNSView(context: Context) -> CurrentView { CurrentView() }
+    func updateNSView(_ view: CurrentView, context: Context) { view.wires = wires }
+
+    final class CurrentView: NSView {
+        var wires: [Wire] = [] { didSet { if wires != oldValue { needsLayout = true } } }
+        private var layers: [CAShapeLayer] = []
+
+        override var isFlipped: Bool { true }
+
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            wantsLayer = true
+        }
+
+        required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+        override func viewDidChangeEffectiveAppearance() {
+            super.viewDidChangeEffectiveAppearance()
+            needsLayout = true
+        }
+
+        override func layout() {
+            super.layout()
+            guard let host = layer, bounds.width > 0 else { return }
+            host.isGeometryFlipped = true
+            let s = bounds.width / 420
+            while layers.count < wires.count {
+                let shape = CAShapeLayer()
+                shape.fillColor = nil
+                shape.lineCap = .round
+                host.addSublayer(shape)
+                layers.append(shape)
+            }
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            for (wire, shape) in zip(wires, layers) {
+                shape.frame = bounds
+                shape.path = wire.shape.cgPath(scale: s)
+                effectiveAppearance.performAsCurrentDrawingAppearance { shape.strokeColor = wire.color.cgColor }
+                shape.lineWidth = 3 * s
+                shape.lineDashPattern = [NSNumber(value: Double(2 * s)), NSNumber(value: Double(12 * s))]
+                shape.isHidden = !wire.active
+            }
+            CATransaction.commit()
+            for (wire, shape) in zip(wires, layers) {
+                if wire.active { flow(shape, scale: s) } else { shape.removeAnimation(forKey: "flow") }
+            }
+        }
+
+        private func flow(_ shape: CAShapeLayer, scale s: CGFloat) {
+            let flow = CABasicAnimation(keyPath: "lineDashPhase")
+            flow.fromValue = 0
+            flow.toValue = -14 * s
+            flow.duration = 0.9
+            flow.repeatCount = .infinity
+            flow.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 120, preferred: 60)
+            shape.add(flow, forKey: "flow")
+        }
     }
 }
 

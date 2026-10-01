@@ -15,15 +15,22 @@ struct OverviewView: View {
             .buttonStyle(.borderedProminent)
             .disabled(model.isScanning)
         } content: {
-            HStack(alignment: .top, spacing: 14) {
+            CardRow {
                 scoreCard.frame(minWidth: 440)
                 machineCard.frame(width: 290)
             }
 
-            Columns(minimum: 156) { tiles }
+            Columns(minimum: 156) {
+                OverviewTile(area: .battery) { BatteryTileContent() }
+                OverviewTile(area: .storage) { StorageTileContent() }
+                OverviewTile(area: .memory) { MemoryTileContent() }
+                OverviewTile(area: .performance) { CPUTileContent() }
+                OverviewTile(area: .performance) { GPUTileContent() }
+            }
 
             findingsSection
         }
+        .onAppear { model.ensureSummary() }
     }
 
     // MARK: Score
@@ -44,6 +51,7 @@ struct OverviewView: View {
                     if model.isScanning {
                         ProgressView(value: model.scanProgress) { Text(model.scanStatus).font(.caption) }
                             .controlSize(.small)
+                            .animation(.smooth, value: model.scanProgress)
                     }
                 }
             }
@@ -62,10 +70,7 @@ struct OverviewView: View {
         }
     }
 
-    private func regenerateSummary() {
-        ai.generate(key: "summary", instructions: AIPrompts.summaryInstructions,
-                    prompt: AIPrompts.summary(snapshot: model.snapshot, findings: model.findings), force: true)
-    }
+    private func regenerateSummary() { model.regenerateSummary() }
 
     private var machineCard: some View {
         Card("This Mac") {
@@ -82,49 +87,6 @@ struct OverviewView: View {
                 ProgressView().controlSize(.small)
             }
         }
-    }
-
-    // MARK: Tiles
-
-    @ViewBuilder
-    private var tiles: some View {
-        if let b = model.snapshot.battery {
-            tile(.battery) {
-                StatTile(title: "Battery", value: "\(b.chargePercent)", unit: "%",
-                         caption: b.isCharging ? "Charging" + (b.telemetry.map { String(format: " · %.0f W", max(0, $0.battery)) } ?? "")
-                             : "\(b.healthPercent.map { "\($0)% health" } ?? "") · \(b.cycleCount) cycles",
-                         severity: b.isCharging ? .ok : nil)
-            }
-        }
-        if let st = model.snapshot.storage {
-            tile(.storage) {
-                StatTile(title: "Storage", value: String(format: "%.0f", Double(st.availableBytes) / 1e9), unit: "GB free",
-                         caption: "of \(Format.gb(st.totalBytes, digits: 0)) · SMART \(st.smartStatus ?? "unknown")")
-            }
-        }
-        if let m = model.snapshot.memory {
-            tile(.memory) {
-                StatTile(title: "Memory", value: "\(m.availablePercent)", unit: "% free",
-                         caption: "Swap \(Format.percent(m.swapFraction)) full",
-                         severity: m.swapFraction > 0.6 || m.pressure != .normal ? .warning : nil)
-            }
-        }
-        tile(.performance) {
-            StatTile(title: "CPU", value: String(format: "%.0f", (model.cpuNow?.total ?? 0) * 100), unit: "%",
-                     caption: model.snapshot.performance?.loadAverage.first.map { String(format: "Load %.2f", $0) } ?? "")
-        }
-        if let g = model.snapshot.gpu {
-            tile(.performance) {
-                StatTile(title: "GPU", value: "\(g.deviceUtilization)", unit: "%",
-                         caption: "\(model.snapshot.machine?.gpuCores.map { "\($0) cores · " } ?? "")\(Format.memory(g.inUseMemory)) in use")
-            }
-        }
-    }
-
-    private func tile<Content: View>(_ area: Area, @ViewBuilder content: () -> Content) -> some View {
-        Button { model.selection = area } label: { content() }
-            .buttonStyle(.plain)
-            .help("Open \(area.title)")
     }
 
     // MARK: Findings
@@ -162,11 +124,13 @@ struct OverviewView: View {
                                         perform: { model.perform($0) },
                                         explain: { model.explain($0) },
                                         dismissExplanation: { ai.dismiss(key: "finding.\(finding.id)") })
+                                .transition(.opacity.combined(with: .move(edge: .top)))
                         }
                     }
                 }
             }
         }
+        .animation(.smooth(duration: 0.45), value: model.findings)
     }
 
     private var headline: String {
@@ -184,5 +148,79 @@ struct OverviewView: View {
         if important.isEmpty { return "No critical or warning-level issues found." }
         let names = important.prefix(3).map { $0.title.prefix(1).lowercased() + $0.title.dropFirst() }
         return "Most important: " + ListFormatter.localizedString(byJoining: names) + "."
+    }
+}
+
+// MARK: - Tiles
+
+/// Each tile reads only its own reading, so a once-a-second CPU sample redraws one tile, not the page.
+private struct OverviewTile<Content: View>: View {
+    @Environment(AppModel.self) private var model
+    let area: Area
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        Button { model.selection = area } label: { content() }
+            .buttonStyle(.plain)
+            .help("Open \(area.title)")
+    }
+}
+
+private struct BatteryTileContent: View {
+    @Environment(AppModel.self) private var model
+    var body: some View {
+        if let b = model.snapshot.battery {
+            StatTile(title: "Battery", value: "\(b.chargePercent)", unit: "%",
+                     caption: b.isCharging ? "Charging" + (b.telemetry.map { String(format: " · %.0f W", max(0, $0.battery)) } ?? "")
+                         : "\(b.healthPercent.map { "\($0)% health" } ?? "") · \(b.cycleCount) cycles",
+                     severity: b.isCharging ? .ok : nil)
+        } else {
+            StatTile(title: "Battery", value: model.snapshot.hasBattery ? "…" : "None", caption: model.snapshot.hasBattery ? "Reading" : "This Mac has no battery")
+        }
+    }
+}
+
+private struct StorageTileContent: View {
+    @Environment(AppModel.self) private var model
+    var body: some View {
+        if let st = model.snapshot.storage {
+            StatTile(title: "Storage", value: String(format: "%.0f", Double(st.availableBytes) / 1e9), unit: "GB free",
+                     caption: "of \(Format.gb(st.totalBytes, digits: 0)) · SMART \(st.smartStatus ?? "unknown")")
+        } else {
+            StatTile(title: "Storage", value: "…", caption: "Measuring")
+        }
+    }
+}
+
+private struct MemoryTileContent: View {
+    @Environment(AppModel.self) private var model
+    var body: some View {
+        if let m = model.snapshot.memory {
+            StatTile(title: "Memory", value: "\(m.availablePercent)", unit: "% free",
+                     caption: "Swap \(Format.percent(m.swapFraction)) full",
+                     severity: m.swapFraction > 0.6 || m.pressure != .normal ? .warning : nil)
+        } else {
+            StatTile(title: "Memory", value: "…", caption: "Reading")
+        }
+    }
+}
+
+private struct CPUTileContent: View {
+    @Environment(AppModel.self) private var model
+    var body: some View {
+        StatTile(title: "CPU", value: String(format: "%.0f", (model.cpuNow?.total ?? 0) * 100), unit: "%",
+                 caption: model.snapshot.performance?.loadAverage.first.map { String(format: "Load %.2f", $0) } ?? "")
+    }
+}
+
+private struct GPUTileContent: View {
+    @Environment(AppModel.self) private var model
+    var body: some View {
+        if let g = model.snapshot.gpu {
+            StatTile(title: "GPU", value: "\(g.deviceUtilization)", unit: "%",
+                     caption: "\(model.snapshot.machine?.gpuCores.map { "\($0) cores · " } ?? "")\(Format.memory(g.inUseMemory)) in use")
+        } else {
+            StatTile(title: "GPU", value: "…", caption: "Reading")
+        }
     }
 }

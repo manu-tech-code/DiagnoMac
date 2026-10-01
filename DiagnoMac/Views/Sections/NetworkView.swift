@@ -34,7 +34,7 @@ struct NetworkView: View {
                     }
                 }
 
-                HStack(alignment: .top, spacing: 14) {
+                CardRow {
                     if let w = n.wifi {
                         Card("Wi-Fi signal") {
                             VStack(spacing: 7) {
