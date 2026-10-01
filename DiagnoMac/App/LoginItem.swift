@@ -70,6 +70,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Closing the window keeps DiagnoMac running in the menu bar. Without this, SwiftUI quits an
+    /// app whose main scene is a single `Window` as soon as that window closes.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        !UserDefaults.standard.bool(forKey: Preferences.showMenuBarIconKey)
+    }
+
     /// Clicking the Dock icon or reopening the app from Finder brings the window back.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag { AppDelegate.showMainWindow() }
