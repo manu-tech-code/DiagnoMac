@@ -5,28 +5,31 @@ struct PerformanceView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        Page("Performance", subtitle: "Live CPU load, thermal state and the processes using the most CPU.") {
+        Page("CPU & GPU", subtitle: "Live load on the processor and graphics, thermal state, and what's using them.") {
             Button("Refresh Processes") { Task { await model.refresh(.performance) } }
         } content: {
-            Columns(minimum: 200) {
+            Columns(minimum: 190) {
                 let load = model.snapshot.performance?.loadAverage ?? []
-                StatTile(title: "Load average", value: load.first.map { String(format: "%.2f", $0) } ?? "—",
-                         caption: load.count == 3 ? String(format: "1 min · %.2f 5 min · %.2f 15 min", load[1], load[2]) : nil)
                 StatTile(title: "CPU in use", value: String(format: "%.0f", (model.cpuNow?.total ?? 0) * 100), unit: "%",
-                         caption: "All \(model.cpuNow?.perCore.count ?? 0) cores")
+                         caption: load.count == 3 ? String(format: "Load %.2f · %.2f · %.2f", load[0], load[1], load[2]) : nil)
+                StatTile(title: "GPU in use", value: model.snapshot.gpu.map { "\($0.deviceUtilization)" } ?? "—", unit: "%",
+                         caption: model.snapshot.machine?.gpuCores.map { "\($0)-core GPU" })
+                StatTile(title: "GPU memory", value: model.snapshot.gpu.map { Format.memory($0.inUseMemory) } ?? "—",
+                         caption: model.snapshot.gpu.map { "\(Format.memory($0.allocatedMemory)) allocated" })
                 let thermal = model.snapshot.performance?.thermalState ?? ProcessInfo.processInfo.thermalState
                 StatTile(title: "Thermal state", value: thermal.label,
                          caption: thermal == .nominal ? "Not throttling" : "Performance reduced to cool down",
                          severity: thermal == .nominal ? nil : (thermal == .fair ? .warning : .critical))
-                if let m = model.snapshot.machine {
-                    StatTile(title: "Chip", value: m.chip.replacingOccurrences(of: "Apple ", with: ""),
-                             caption: "\(m.performanceCores)P + \(m.efficiencyCores)E CPU" + (m.gpuCores.map { " · \($0)-core GPU" } ?? ""))
-                }
             }
 
             HStack(alignment: .top, spacing: 14) {
-                Card("Per-core load", trailing: "Live") { coreBars }
-                Card("Total CPU, last 2 minutes", trailing: "Live") { historyChart }
+                Card("CPU per core") { coreBars }
+                Card("CPU, last 2 minutes") { SparklineChart(values: model.cpuHistory) }
+            }
+
+            HStack(alignment: .top, spacing: 14) {
+                gpuCard
+                gpuProcessesCard
             }
 
             processTable
@@ -54,23 +57,56 @@ struct PerformanceView: View {
         .frame(height: 140)
     }
 
-    private var historyChart: some View {
-        let samples = Array(model.cpuHistory.enumerated())
-        return Chart(samples, id: \.offset) { index, value in
-            AreaMark(x: .value("Second", index), y: .value("CPU", value * 100))
-                .foregroundStyle(Color.accentColor.opacity(0.15))
-            LineMark(x: .value("Second", index), y: .value("CPU", value * 100))
-                .foregroundStyle(Color.accentColor)
-        }
-        .chartYScale(domain: 0...100)
-        .chartXAxis(.hidden)
-        .chartYAxis {
-            AxisMarks(values: [0, 50, 100]) { value in
-                AxisGridLine()
-                AxisValueLabel { Text("\(value.as(Int.self) ?? 0)%") }
+    private var gpuCard: some View {
+        Card("GPU, last 3 minutes") {
+            SparklineChart(values: model.gpuHistory, color: .intelligence, height: 110)
+            if let g = model.snapshot.gpu {
+                VStack(spacing: 10) {
+                    meter("Overall", g.deviceUtilization)
+                    meter("Rendering", g.rendererUtilization)
+                    meter("Geometry (tiler)", g.tilerUtilization)
+                }
             }
         }
-        .frame(height: 140)
+    }
+
+    private func meter(_ name: String, _ value: Int) -> some View {
+        VStack(spacing: 4) {
+            HStack {
+                Text(name).foregroundStyle(.secondary)
+                Spacer()
+                Text("\(value)%").monospacedDigit()
+            }
+            .font(.callout)
+            ProgressView(value: Double(value), total: 100).tint(.intelligence)
+        }
+    }
+
+    private var gpuProcessesCard: some View {
+        Card("Using the GPU now", trailing: "Updates every 2 seconds") {
+            let processes = model.snapshot.gpu?.processes ?? []
+            if processes.isEmpty {
+                Text("Measuring… Usage appears after two samples.")
+                    .foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
+            } else {
+                Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
+                    GridRow {
+                        Text("Process"); Text("GPU").gridColumnAlignment(.trailing); Text("Total GPU time").gridColumnAlignment(.trailing)
+                    }
+                    .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    Divider()
+                    ForEach(processes.prefix(8)) { p in
+                        GridRow {
+                            Text(p.name).lineLimit(1)
+                            Text(String(format: "%.1f%%", p.percent)).monospacedDigit()
+                            Text(Format.duration(p.totalSeconds)).monospacedDigit().foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                Text("Share of time each process kept the GPU busy, from the graphics driver's per-app counters.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 
     @ViewBuilder

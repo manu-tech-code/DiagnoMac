@@ -1,3 +1,4 @@
+import Charts
 import SwiftUI
 
 extension Severity {
@@ -246,5 +247,177 @@ struct Columns<Content: View>: View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: minimum), spacing: 14, alignment: .top)], alignment: .leading, spacing: 14) {
             content()
         }
+    }
+}
+
+// MARK: - Findings
+
+extension Severity {
+    var symbol: String {
+        switch self {
+        case .ok: "checkmark.circle.fill"
+        case .info: "lightbulb.fill"
+        case .warning: "exclamationmark.triangle.fill"
+        case .critical: "xmark.octagon.fill"
+        }
+    }
+}
+
+/// One finding with room to breathe: icon, title, explanation, area, and its actions.
+struct FindingCard: View {
+    let finding: Finding
+    var explanation: AIText?
+    var canExplain: Bool
+    let perform: (Finding) -> Void
+    let explain: (Finding) -> Void
+    var dismissExplanation: (() -> Void)?
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 16) {
+            Image(systemName: finding.severity.symbol)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(finding.severity.color)
+                .frame(width: 36, height: 36)
+                .background(finding.severity.color.opacity(0.14), in: RoundedRectangle(cornerRadius: 9))
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(finding.title).font(.headline)
+                Text(finding.detail).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Label(finding.area.title, systemImage: finding.area.systemImage)
+                    .font(.caption).foregroundStyle(.tertiary).padding(.top, 2)
+                if let explanation {
+                    AIBlock(title: "Explained on this Mac", text: explanation, onDismiss: dismissExplanation,
+                            onRetry: { explain(finding) })
+                        .padding(.top, 6)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(alignment: .trailing, spacing: 8) {
+                if let title = finding.actionTitle {
+                    if finding.severity >= .warning {
+                        Button(title) { perform(finding) }.buttonStyle(.borderedProminent)
+                    } else {
+                        Button(title) { perform(finding) }
+                    }
+                }
+                if canExplain && explanation == nil {
+                    ExplainButton { explain(finding) }
+                }
+            }
+            .fixedSize()
+        }
+        .padding(16)
+        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator.opacity(0.6)))
+    }
+}
+
+// MARK: - Apple Intelligence
+
+/// The color used for anything written by the on-device model.
+extension Color {
+    static let intelligence = Color.purple
+}
+
+struct ExplainButton: View {
+    var title = "Explain"
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: "sparkles")
+        }
+        .buttonStyle(.bordered)
+        .tint(.intelligence)
+        .help("Explain with Apple Intelligence, on this Mac")
+    }
+}
+
+/// Text from the on-device model, streamed in as it's written.
+struct AIBlock: View {
+    let title: String
+    let text: AIText
+    var onDismiss: (() -> Void)?
+    var onRetry: (() -> Void)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Label(title, systemImage: "sparkles")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.intelligence)
+                Spacer()
+                if text.isStreaming { ProgressView().controlSize(.mini) }
+                if let onDismiss, !text.isStreaming {
+                    Button { onDismiss() } label: { Image(systemName: "xmark") }
+                        .buttonStyle(.borderless).foregroundStyle(.secondary).help("Hide")
+                }
+            }
+            if let error = text.error {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(error).foregroundStyle(.secondary)
+                    if let onRetry { Button("Try Again", action: onRetry).buttonStyle(.link) }
+                }
+            } else if text.text.isEmpty {
+                Text("Thinking…").foregroundStyle(.secondary)
+            } else {
+                Text(AIPrompts.clean(text.text))
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .animation(.easeOut(duration: 0.15), value: text.text)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.intelligence.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.intelligence.opacity(0.22)))
+    }
+}
+
+/// A small pulsing dot with a label, for things that are happening right now.
+struct LiveBadge: View {
+    let text: String
+    var color: Color = .green
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var pulse = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle().fill(color).frame(width: 7, height: 7)
+                .opacity(pulse ? 0.3 : 1)
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: pulse)
+            Text(text)
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(color)
+        .padding(.horizontal, 8).padding(.vertical, 3)
+        .background(color.opacity(0.14), in: Capsule())
+        .onAppear { pulse = true }
+    }
+}
+
+/// Small line chart for a series of 0...1 values, newest on the right.
+struct SparklineChart: View {
+    let values: [Double]
+    var color: Color = .accentColor
+    var height: CGFloat = 140
+
+    var body: some View {
+        Chart(Array(values.enumerated()), id: \.offset) { index, value in
+            AreaMark(x: .value("Sample", index), y: .value("Load", value * 100))
+                .foregroundStyle(color.opacity(0.15))
+            LineMark(x: .value("Sample", index), y: .value("Load", value * 100))
+                .foregroundStyle(color)
+        }
+        .chartYScale(domain: 0...100)
+        .chartXAxis(.hidden)
+        .chartYAxis {
+            AxisMarks(values: [0, 50, 100]) { value in
+                AxisGridLine()
+                AxisValueLabel { Text("\(value.as(Int.self) ?? 0)%") }
+            }
+        }
+        .frame(height: height)
     }
 }

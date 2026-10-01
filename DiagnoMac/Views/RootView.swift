@@ -44,6 +44,9 @@ struct RootView: View {
     private func detail(for area: Area) -> some View {
         switch area {
         case .overview: OverviewView()
+        case .assistant: AssistantView()
+        case .apps: AppsView()
+        case .devices: DevicesView()
         case .battery: BatteryView()
         case .performance: PerformanceView()
         case .memory: MemoryView()

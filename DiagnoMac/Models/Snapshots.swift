@@ -48,6 +48,8 @@ struct BatteryInfo: Sendable {
     var fullyCharged: Bool
     var minutesToEmpty: Int?
     var minutesToFull: Int?
+    var adapter: AdapterInfo?
+    var telemetry: PowerTelemetry?
 
     /// Matches what System Settings calls "Maximum Capacity": nominal vs design, capped at 100.
     var healthPercent: Int? {
@@ -57,6 +59,7 @@ struct BatteryInfo: Sendable {
 
     /// Positive while charging, negative while discharging.
     var watts: Double? {
+        if let telemetry, telemetry.battery != 0 { return telemetry.battery }
         guard let v = voltageV, let a = amperageMA else { return nil }
         return v * Double(a) / 1000
     }
@@ -236,8 +239,10 @@ struct StartupItem: Identifiable, Sendable {
         let parts = label.split(separator: ".")
         guard parts.count >= 2 else { return label }
         let known = ["com", "org", "io", "net", "sh", "app", "dev", "co", "me", "us"]
-        let name = known.contains(String(parts[0])) ? parts[1] : parts[0]
-        return name.prefix(1).uppercased() + name.dropFirst()
+        let name = String(known.contains(String(parts[0])) ? parts[1] : parts[0])
+        let friendly = ["brew": "Homebrew", "epicgames": "Epic Games", "microsoft": "Microsoft", "google": "Google",
+                        "adobe": "Adobe", "docker": "Docker", "zoom": "Zoom", "dropbox": "Dropbox", "tailscale": "Tailscale"]
+        return friendly[name.lowercased()] ?? (name.prefix(1).uppercased() + name.dropFirst())
     }
 }
 
@@ -251,6 +256,7 @@ struct CrashReport: Sendable {
     let kind: Kind
     /// Apple's own processes; the user can't update these separately from macOS.
     var isFirstParty = false
+    var bundleID: String?
 }
 
 struct CrashGroup: Identifiable, Sendable {
@@ -258,7 +264,11 @@ struct CrashGroup: Identifiable, Sendable {
     let reports: [CrashReport]
     var id: String { process }
     var count: Int { reports.count }
-    var isFirstParty: Bool { reports.contains(where: \.isFirstParty) }
+    /// macOS sometimes marks a third-party crash as first-party, so any non-Apple bundle ID wins.
+    var isFirstParty: Bool {
+        if reports.contains(where: { ($0.bundleID.map { !$0.hasPrefix("com.apple.") }) ?? false }) { return false }
+        return reports.contains(where: \.isFirstParty)
+    }
     var lastDate: Date { reports.map(\.date).max() ?? .distantPast }
     var kinds: [CrashReport.Kind] { Array(Set(reports.map(\.kind))).sorted { $0.rawValue < $1.rawValue } }
 }

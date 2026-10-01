@@ -34,6 +34,17 @@ struct StartupView: View {
     }
 
     private func row(_ item: StartupItem) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            rowContent(item)
+            if let text = model.intelligence.text(for: "startup.\(item.id)") {
+                AIBlock(title: "Explained on this Mac", text: text,
+                        onDismiss: { model.intelligence.dismiss(key: "startup.\(item.id)") },
+                        onRetry: { model.explain(item) })
+            }
+        }
+    }
+
+    private func rowContent(_ item: StartupItem) -> some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
@@ -45,6 +56,9 @@ struct StartupView: View {
                     .font(.callout).foregroundStyle(.secondary)
             }
             Spacer()
+            if model.intelligence.isAvailable && model.intelligence.text(for: "startup.\(item.id)") == nil {
+                ExplainButton(title: "What Is This?") { model.explain(item) }.controlSize(.small)
+            }
             Button {
                 NSWorkspace.shared.activateFileViewerSelecting([item.url])
             } label: { Image(systemName: "magnifyingglass") }

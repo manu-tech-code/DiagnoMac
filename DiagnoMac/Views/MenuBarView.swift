@@ -22,7 +22,14 @@ struct MenuBarView: View {
                     ProgressView(value: model.cpuNow?.total ?? 0)
                     Text(Format.percent(model.cpuNow?.total ?? 0)).monospacedDigit().frame(width: 44, alignment: .trailing)
                 }
-                if let mem = model.liveMemory {
+                if let gpu = model.snapshot.gpu {
+                    GridRow {
+                        Text("GPU").foregroundStyle(.secondary)
+                        ProgressView(value: Double(gpu.deviceUtilization) / 100).tint(.intelligence)
+                        Text("\(gpu.deviceUtilization)%").monospacedDigit().frame(width: 44, alignment: .trailing)
+                    }
+                }
+                if let mem = model.snapshot.memory {
                     GridRow {
                         Text("Memory").foregroundStyle(.secondary)
                         ProgressView(value: Double(100 - mem.availablePercent) / 100)
@@ -36,9 +43,20 @@ struct MenuBarView: View {
                 }
                 if let battery = model.snapshot.battery {
                     GridRow {
-                        Text("Battery").foregroundStyle(.secondary)
-                        ProgressView(value: Double(battery.chargePercent) / 100)
+                        HStack(spacing: 3) {
+                            Text("Battery").foregroundStyle(.secondary)
+                            if battery.isCharging { Image(systemName: "bolt.fill").foregroundStyle(.green).font(.caption) }
+                        }
+                        ProgressView(value: Double(battery.chargePercent) / 100).tint(battery.isCharging ? .green : nil)
                         Text("\(battery.chargePercent)%").monospacedDigit().frame(width: 44, alignment: .trailing)
+                    }
+                    if battery.isCharging, let t = battery.telemetry {
+                        GridRow {
+                            Text("")
+                            Text(String(format: "Charging at %.0f W", max(0, t.battery)) + (battery.minutesToFull.map { " · full in \(Format.minutes($0))" } ?? ""))
+                                .font(.caption).foregroundStyle(.secondary)
+                                .gridCellColumns(2)
+                        }
                     }
                 }
             }
@@ -58,12 +76,12 @@ struct MenuBarView: View {
 
             HStack {
                 Button("Open DiagnoMac") {
-                    openWindow(id: "main")
-                    NSApp.activate()
+                    AppDelegate.showMainWindow(using: openWindow)
                 }
                 .keyboardShortcut(.defaultAction)
                 Spacer()
                 Button("Scan") { Task { await model.scan() } }.disabled(model.isScanning)
+                SettingsLink { Image(systemName: "gearshape") }.help("Settings")
                 Button("Quit") { NSApp.terminate(nil) }
             }
         }

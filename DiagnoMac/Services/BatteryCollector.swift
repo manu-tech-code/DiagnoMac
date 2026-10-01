@@ -10,6 +10,12 @@ enum BatteryCollector {
         return info
     }
 
+    /// The fast IOKit-only read used every few seconds. Skips the system_profiler fallback,
+    /// which is far too heavy to run continuously.
+    static func readLive() async -> BatteryInfo? {
+        await offMain { read() }
+    }
+
     /// Fallback for when the power source API doesn't report health (seen on macOS 27).
     private static func profilerCondition() async -> String? {
         let result = await Shell.run("/usr/sbin/system_profiler", ["SPPowerDataType", "-json"])
@@ -64,6 +70,25 @@ enum BatteryCollector {
             minutesToFull: minutes("AvgTimeToFull")
         )
         info.condition = powerSourceCondition()
+
+        if info.externalConnected, let details = props["AdapterDetails"] as? [String: Any],
+           let watts = details["Watts"] as? Int, watts > 0 {
+            let name = (details["Name"] as? String)?.trimmingCharacters(in: .whitespaces)
+            info.adapter = AdapterInfo(
+                name: name.flatMap { $0.isEmpty ? nil : $0 } ?? "\(watts)W USB-C charger",
+                watts: watts,
+                voltageV: (details["AdapterVoltage"] as? Int).map { Double($0) / 1000 },
+                currentA: (details["Current"] as? Int).map { Double($0) / 1000 })
+        }
+
+        // Milliwatts; BatteryPower is a signed value stored as unsigned.
+        if let t = props["PowerTelemetryData"] as? [String: Any] {
+            func watts(_ key: String) -> Double {
+                (t[key] as? NSNumber).map { Double(Int64(truncatingIfNeeded: $0.int64Value)) / 1000 } ?? 0
+            }
+            info.telemetry = PowerTelemetry(systemInput: watts("SystemPowerIn"), battery: watts("BatteryPower"),
+                                            systemLoad: watts("SystemLoad"), adapterLoss: watts("AdapterEfficiencyLoss"))
+        }
         return info
     }
 

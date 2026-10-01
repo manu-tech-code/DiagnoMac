@@ -2,10 +2,13 @@ import SwiftUI
 
 @main
 struct DiagnoMacApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model = AppModel()
+    @State private var loginItem = LoginItem()
+    @AppStorage(Preferences.showMenuBarIconKey) private var showMenuBarIcon = true
 
     var body: some Scene {
-        Window("DiagnoMac", id: "main") {
+        Window("DiagnoMac", id: AppDelegate.mainWindowID) {
             RootView()
                 .environment(model)
                 .frame(minWidth: 880, minHeight: 600)
@@ -29,7 +32,11 @@ struct DiagnoMacApp: App {
             }
         }
 
-        MenuBarExtra {
+        Settings {
+            SettingsView().environment(loginItem)
+        }
+
+        MenuBarExtra(isInserted: $showMenuBarIcon) {
             MenuBarView().environment(model)
         } label: {
             Label("DiagnoMac", systemImage: model.score >= 90 || model.findings.isEmpty ? "stethoscope" : "stethoscope.circle")

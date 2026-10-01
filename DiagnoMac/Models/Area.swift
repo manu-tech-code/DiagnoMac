@@ -2,20 +2,23 @@ import Foundation
 
 /// The sections of the app, in sidebar order.
 enum Area: String, CaseIterable, Identifiable, Hashable, Sendable {
-    case overview, battery, performance, memory, storage, network, security, startup, hardware, logs, report
+    case overview, assistant, apps, battery, performance, memory, storage, network, security, startup, devices, hardware, logs, report
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .overview: "Overview"
+        case .assistant: "Assistant"
+        case .apps: "Running Apps"
         case .battery: "Battery"
-        case .performance: "Performance"
+        case .performance: "CPU & GPU"
         case .memory: "Memory"
         case .storage: "Storage"
         case .network: "Network"
         case .security: "Security"
         case .startup: "Startup Items"
+        case .devices: "Devices"
         case .hardware: "Hardware Tests"
         case .logs: "Crash Logs"
         case .report: "Report"
@@ -25,6 +28,8 @@ enum Area: String, CaseIterable, Identifiable, Hashable, Sendable {
     var systemImage: String {
         switch self {
         case .overview: "gauge.with.dots.needle.67percent"
+        case .assistant: "sparkles"
+        case .apps: "square.stack.3d.up"
         case .battery: "battery.100percent"
         case .performance: "cpu"
         case .memory: "memorychip"
@@ -32,6 +37,7 @@ enum Area: String, CaseIterable, Identifiable, Hashable, Sendable {
         case .network: "wifi"
         case .security: "lock.shield"
         case .startup: "power"
+        case .devices: "cable.connector"
         case .hardware: "keyboard"
         case .logs: "exclamationmark.bubble"
         case .report: "doc.text"
@@ -39,7 +45,7 @@ enum Area: String, CaseIterable, Identifiable, Hashable, Sendable {
     }
 
     /// Areas that don't produce findings and shouldn't show a health dot.
-    var showsHealth: Bool { self != .overview && self != .hardware && self != .report }
+    var showsHealth: Bool { ![.overview, .assistant, .hardware, .report].contains(self) }
 }
 
 enum Severity: Int, Comparable, Sendable, Codable {
@@ -52,6 +58,16 @@ enum Severity: Int, Comparable, Sendable, Codable {
         case .ok: "Good"
         case .info: "Suggestion"
         case .warning: "Attention"
+        case .critical: "Fix now"
+        }
+    }
+
+    /// Heading used when findings are grouped by severity.
+    var groupTitle: String {
+        switch self {
+        case .ok: "Good"
+        case .info: "Suggestions"
+        case .warning: "Needs attention"
         case .critical: "Fix now"
         }
     }

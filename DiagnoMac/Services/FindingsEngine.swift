@@ -13,6 +13,10 @@ struct DiagnosticsSnapshot: Sendable {
     var security: SecurityInfo?
     var startup: [StartupItem]?
     var logs: LogsInfo?
+    var gpu: GPUInfo?
+    var apps: [RunningApp]?
+    var backup: BackupInfo?
+    var devices: DevicesInfo?
     var takenAt = Date()
 }
 
@@ -54,13 +58,48 @@ enum FindingsEngine {
             }
         }
 
+        let idleApps = (s.apps ?? []).filter(\.isIdle)
+        let idleBytes = idleApps.reduce(UInt64(0)) { $0 + $1.memoryBytes }
+
         if let m = s.memory {
             if m.pressure != .normal || m.swapFraction > 0.6 {
                 let severity: Severity = m.pressure == .critical ? .critical : .warning
+                let biggestIdle = idleApps.max { $0.memoryBytes < $1.memoryBytes }
+                    .map { " \($0.name) is holding \(Format.bytes($0.memoryBytes, style: .memory)) while idle." } ?? " Apps are being pushed out of RAM."
                 out.append(Finding(id: "memory", severity: severity, area: .memory,
                                    title: m.swapFraction > 0.6 ? "Swap is \(Format.percent(m.swapFraction)) full" : "Memory pressure is \(m.pressure.label.lowercased())",
-                                   detail: "\(Format.memory(m.swapUsed)) of \(Format.memory(m.swapTotal)) swap in use with \(m.pageouts.formatted()) page-outs. Apps are being pushed out of RAM.",
-                                   actionTitle: "Show Memory Users", action: .navigate(.memory)))
+                                   detail: "\(Format.memory(m.swapUsed)) of \(Format.memory(m.swapTotal)) swap in use, with \(m.pageouts.formatted()) page-outs." + biggestIdle,
+                                   actionTitle: "Relieve Memory", action: .navigate(.memory)))
+            }
+        }
+
+        if idleBytes > 1_000_000_000 {
+            let names = ListFormatter.localizedString(byJoining: idleApps.prefix(4).map(\.name))
+            out.append(Finding(id: "idle-apps", severity: .info, area: .apps,
+                               title: "\(idleApps.count) idle apps are using \(Format.bytes(idleBytes, style: .memory))",
+                               detail: "\(names) \(idleApps.count == 1 ? "has" : "have") used no CPU recently but still hold memory.",
+                               actionTitle: "Review Apps", action: .navigate(.apps)))
+        }
+
+        if let backup = s.backup {
+            let settings = URL(string: "x-apple.systempreferences:com.apple.Time-Machine-Settings.extension")!
+            if !backup.isConfigured {
+                out.append(Finding(id: "backup", severity: .warning, area: .storage, title: "No Time Machine backup",
+                                   detail: "No backup disk is set up. If this SSD fails or the Mac is lost, your files can't be recovered.",
+                                   actionTitle: "Set Up Time Machine…", action: .openURL(settings)))
+            } else if let days = backup.daysSinceBackup, days > 7 {
+                out.append(Finding(id: "backup", severity: .warning, area: .storage, title: "Last backup was \(days) days ago",
+                                   detail: "Time Machine hasn't completed a backup for over a week. Connect your backup disk.",
+                                   actionTitle: "Open Time Machine", action: .openURL(settings)))
+            }
+        }
+
+        if let devices = s.devices {
+            for device in devices.bluetooth where device.isConnected {
+                guard let level = device.lowestBattery, level < 20 else { continue }
+                out.append(Finding(id: "bt-\(device.name)", severity: level < 10 ? .warning : .info, area: .devices,
+                                   title: "\(device.name) battery at \(level)%",
+                                   detail: "Charge it soon so it doesn't die mid-use.", actionTitle: "View Devices", action: .navigate(.devices)))
             }
         }
 

@@ -10,8 +10,9 @@ struct HardwareTestsView: View {
                     DisplayTestCard()
                     SpeakerTestCard()
                     TrackpadTestCard()
-                    CaptureDevicesCard()
+                    MicrophoneTestCard()
                 }
+                CameraTestCard()
             }
         }
     }
@@ -332,32 +333,6 @@ private struct TrackpadTestCard: View {
                 Spacer()
                 Button("Clear") { strokes.removeAll(); clicks = 0 }
             }
-        }
-    }
-}
-
-// MARK: - Camera & microphone
-
-private struct CaptureDevicesCard: View {
-    private var cameras: [AVCaptureDevice] {
-        AVCaptureDevice.DiscoverySession(deviceTypes: [.builtInWideAngleCamera, .external, .continuityCamera], mediaType: .video, position: .unspecified).devices
-    }
-    private var microphones: [AVCaptureDevice] {
-        AVCaptureDevice.DiscoverySession(deviceTypes: [.microphone, .external], mediaType: .audio, position: .unspecified).devices
-            .filter { !$0.localizedName.hasPrefix("CADefaultDeviceAggregate") } // Core Audio's internal aggregate device
-    }
-
-    var body: some View {
-        Card("Camera & microphone") {
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(cameras, id: \.uniqueID) { Label($0.localizedName, systemImage: "camera") }
-                ForEach(microphones, id: \.uniqueID) { Label($0.localizedName, systemImage: "mic") }
-                if cameras.isEmpty && microphones.isEmpty {
-                    Text("No cameras or microphones found.").foregroundStyle(.secondary)
-                }
-            }
-            Text("Live camera preview and a microphone level meter are coming next. They need camera and microphone permission.")
-                .font(.caption).foregroundStyle(.secondary)
         }
     }
 }

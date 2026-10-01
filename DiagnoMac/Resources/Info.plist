@@ -24,7 +24,13 @@
 	<string>public.app-category.utilities</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>15.0</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>DiagnoMac asks macOS to show its restart dialog when you choose Restart on the Memory page.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>DiagnoMac shows a live preview so you can check that your camera works. Video never leaves your Mac.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 Emmanuel Larbi</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>DiagnoMac shows an input level meter so you can check that your microphone works. Audio is never recorded or sent anywhere.</string>
 </dict>
 </plist>

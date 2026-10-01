@@ -1,10 +1,11 @@
 # DiagnoMac
 
-A native macOS app that checks the health of your Mac and tells you what to fix.
+A native macOS app that checks the health of your Mac, explains what it finds in plain English, and helps you fix it.
 
 ## Build and run
 
 Requirements: Xcode 16 or newer, macOS 15+, and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
+The Apple Intelligence features need macOS 26+ with Apple Intelligence turned on; everything else works without them.
 
 ```bash
 xcodegen generate
@@ -24,39 +25,81 @@ The `.xcodeproj` is generated from `project.yml` and is not checked in.
 
 | Area | Source |
 |---|---|
-| Battery | IOKit `AppleSmartBattery`, IOPowerSources, `system_profiler SPPowerDataType`, `pmset -g custom` |
-| Performance | `host_processor_info` (live per-core, 1 s), `getloadavg`, `ps`, thermal state |
+| Battery & charging | IOKit `AppleSmartBattery` (capacity, adapter details, power telemetry), IOPowerSources, `pmset -g custom` |
+| CPU & GPU | `host_processor_info` (per-core, every second), `getloadavg`, `ps`, thermal state; IOAccelerator `PerformanceStatistics` and per-app `accumulatedGPUTime` |
 | Memory | `host_statistics64`, `vm.swapusage`, `kern.memorystatus_*` |
-| Storage | URL volume resource values, `diskutil info disk0` (SMART), folder sizes |
-| Network | `NWPathMonitor`, CoreWLAN, `ping`, `getaddrinfo`, `networkQuality` |
+| Running apps | `NSWorkspace.runningApplications`, `proc_pid_rusage` (physical footprint and CPU time, including helper processes) |
+| Storage & backups | URL volume resource values, `diskutil info disk0` (SMART), folder sizes, `tmutil` |
+| Network | `NWPathMonitor`, CoreWLAN, `ping`, `getaddrinfo`, `networkQuality` (run under a pseudo-terminal for live progress) |
 | Security | `fdesetup`, `csrutil`, `spctl`, `socketfilterfw`, XProtect bundle, `profiles` |
 | Startup items | LaunchAgents / LaunchDaemons plists, `launchctl list` / `print-disabled` |
-| Crash logs | `DiagnosticReports` `.ips` headers |
-| Hardware tests | Keyboard (raw key codes), full-screen display test, stereo speaker tones, trackpad canvas |
+| Devices | `system_profiler SPBluetoothDataType SPUSBHostDataType`, displays, charger |
+| Crash logs | `DiagnosticReports` `.ips` headers and crash backtraces |
+| Hardware tests | Keyboard (raw key codes), full-screen display test, stereo speaker tones, trackpad canvas, live camera preview, microphone level meter |
+
+Live readings: CPU every second; GPU, battery and charging power every 2 seconds; memory and apps every 5 seconds.
+DiagnoMac itself uses about 2% CPU while open.
 
 Findings are produced by `FindingsEngine` and ranked into a 0–100 score. A daily history is kept in
-`~/Library/Application Support/DiagnoMac/history.json`. A menu bar extra shows live CPU, memory, swap and battery.
+`~/Library/Application Support/DiagnoMac/history.json`, and every charger connection in `charge-log.json` next to it.
+A menu bar extra shows the score and live CPU, GPU, memory, swap and battery.
+
+## Apple Intelligence
+
+DiagnoMac uses Apple's on-device Foundation Models framework. Nothing leaves the Mac and no internet is needed.
+
+- **Assistant:** ask questions in plain English. DiagnoMac picks the readings the question is about and gives them to the
+  model; the model can also read any other part of the scan through a `readMac` tool. Each answer shows which checks it used.
+- **Explain:** on every finding, startup item and crash group. Crash explanations read the report's exception and top stack frames.
+- **Summary:** a short health summary on the Overview after each scan.
+
+The on-device model is small and can get details wrong, so prompts include only real readings plus a few facts it tends to
+confuse (for example that clearing caches frees disk space, not memory). Prompts live in `AIPrompts` and `FMBridge`.
 
 ## Actions that change your Mac
 
 All are user-initiated and confirmed:
 
+- **Quit apps:** asks the app to quit normally, so it can save work. If it hasn't closed after 5 seconds, Force Quit appears.
+- **Restart:** shows macOS's own restart dialog.
 - **Turn on firewall:** macOS shows its own administrator prompt.
 - **Cleanup:** folder contents move to the Trash (restorable); unavailable simulators are removed with `xcrun simctl delete unavailable`.
 - **Startup items:** user agents are switched with `launchctl disable/bootout` and `enable/bootstrap`. The plist is never deleted. System-wide items are read-only.
+
+## Settings
+
+DiagnoMac → Settings (⌘,), or the gear in the menu bar panel:
+
+- **Open DiagnoMac at login** registers the app with `SMAppService`. It appears in System Settings → General → Login Items.
+- **Start in the menu bar only:** when macOS opens the app at login, it skips the window and the Dock icon. Choosing Open DiagnoMac from the menu bar brings both back.
+- **Show DiagnoMac in the menu bar** shows or hides the menu bar icon.
+
+Login Items records the path of the copy you registered. Register from the copy you'll keep (for example in /Applications), not from `build/`.
+
+## App icon
+
+Generated by a script so it can be changed and re-rendered:
+
+```bash
+swift scripts/make-icon.swift
+```
 
 ## Notes
 
 - The app is not sandboxed because it reads system state and runs Apple's command-line tools.
 - Grant Full Disk Access (System Settings → Privacy & Security) to include system-wide crash logs.
-- Debug builds accept `-captureScreens <dir>`, which saves a PNG of each page after the first scan and quits.
+- Per-app GPU use comes from the graphics driver's counters and needs no admin rights. GPU power and frequency would need `powermetrics` (root).
+- Debug builds accept `-captureScreens <dir>`, which saves a PNG of each page after the first scan and quits. Add
+  `-captureDelay <seconds>`, `-captureAsk "<question>"` (also runs the Explain features) or `-captureSpeedTest`; a `dump.txt`
+  with the AI output and report is written alongside.
 
 ## Project layout
 
 ```
 DiagnoMac/
-  App/        App entry, AppModel (state + actions), debug capture
-  Models/     Area, Severity, Finding, snapshot value types
-  Services/   One collector per area, FindingsEngine, HistoryStore, ReportBuilder, Shell, Sysctl
-  Views/      RootView, MenuBarView, Components/, Sections/ (one view per area)
+  App/        App entry, AppModel (state, live sampling, actions), login item, debug capture
+  Models/     Area, Severity, Finding, snapshot and live-data value types
+  Services/   One collector per area, samplers (CPU, GPU, apps), speed test runner, Intelligence (Foundation Models),
+              FindingsEngine, DiagnosticsDescriber, HistoryStore, ReportBuilder, Shell, Sysctl
+  Views/      RootView, MenuBarView, SettingsView, Components/, Sections/ (one view per area)
 ```

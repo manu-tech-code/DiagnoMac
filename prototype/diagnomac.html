@@ -3,7 +3,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Schibsted+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: an instrument-panel app shell. Fixed sidebar of check areas, main pane shows one area at a time. Collapses to a scrolling tab strip on phones. */
+/* Layout: instrument-panel app shell. Fixed sidebar of check areas, one area at a time in the main pane. Collapses to a scrolling tab strip on phones. */
 :root {
   --bg: #e9edf1;
   --panel: #fbfcfd;
@@ -13,12 +13,15 @@
   --line: #d6dde4;
   --accent: #2844d2;
   --accent-soft: #e3e8fd;
+  --ai: #7a3fd1;
+  --ai-soft: #efe6fb;
   --ok: #1d8659;
   --ok-soft: #dff2e8;
   --warn: #a8670d;
   --warn-soft: #fbefd9;
   --crit: #c2342a;
   --crit-soft: #fbe3e0;
+  --on-accent: #ffffff;
   --f-display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
   --f-body: "Schibsted Grotesk", -apple-system, "Helvetica Neue", sans-serif;
   --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
@@ -27,14 +30,14 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #0d1115; --panel: #151a20; --sunk: #10151a; --ink: #e5eaf0; --muted: #8b97a4; --line: #252d36;
-    --accent: #8299ff; --accent-soft: #1d2547; --ok: #42c08a; --ok-soft: #12291f; --warn: #e2a640; --warn-soft: #2d2311;
-    --crit: #f06c61; --crit-soft: #321715; color-scheme: dark;
+    --accent: #8299ff; --accent-soft: #1d2547; --ai: #b68cff; --ai-soft: #271c3d; --ok: #42c08a; --ok-soft: #12291f;
+    --warn: #e2a640; --warn-soft: #2d2311; --crit: #f06c61; --crit-soft: #321715; --on-accent: #0d1115; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #0d1115; --panel: #151a20; --sunk: #10151a; --ink: #e5eaf0; --muted: #8b97a4; --line: #252d36;
-  --accent: #8299ff; --accent-soft: #1d2547; --ok: #42c08a; --ok-soft: #12291f; --warn: #e2a640; --warn-soft: #2d2311;
-  --crit: #f06c61; --crit-soft: #321715; color-scheme: dark;
+  --accent: #8299ff; --accent-soft: #1d2547; --ai: #b68cff; --ai-soft: #271c3d; --ok: #42c08a; --ok-soft: #12291f;
+  --warn: #e2a640; --warn-soft: #2d2311; --crit: #f06c61; --crit-soft: #321715; --on-accent: #0d1115; color-scheme: dark;
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; }
@@ -43,119 +46,177 @@ button, input { font: inherit; color: inherit; }
 button { cursor: pointer; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
 
-.shell { display: grid; grid-template-columns: 228px 1fr; min-height: 100%; }
-.side { border-right: 1px solid var(--line); padding: 20px 12px; display: flex; flex-direction: column; gap: 18px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+.shell { display: grid; grid-template-columns: 232px 1fr; min-height: 100%; }
+.side { border-right: 1px solid var(--line); padding: 20px 12px; display: flex; flex-direction: column; gap: 16px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
 .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; }
 .brand svg { flex: none; }
 .brand b { font: 700 19px/1 var(--f-display); letter-spacing: -0.01em; }
 .brand small { display: block; color: var(--muted); font-size: 11.5px; margin-top: 3px; }
 .nav { display: flex; flex-direction: column; gap: 2px; }
-.nav button { display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; border: 0; background: none; padding: 7px 10px; border-radius: 7px; color: var(--muted); font-weight: 500; }
+.nav button { display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; border: 0; background: none; padding: 6px 10px; border-radius: 7px; color: var(--muted); font-weight: 500; }
 .nav button:hover { background: var(--sunk); color: var(--ink); }
 .nav button[aria-current="page"] { background: var(--panel); color: var(--ink); box-shadow: 0 0 0 1px var(--line); }
+.nav .new { font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--ai); }
 .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--ok); }
-.dot.warn { background: var(--warn); } .dot.crit { background: var(--crit); } .dot.none { background: transparent; border: 1px solid var(--line); }
-.nav-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); padding: 0 10px; margin-bottom: 2px; }
+.dot.warn { background: var(--warn); } .dot.crit { background: var(--crit); } .dot.info { background: var(--accent); } .dot.none { background: transparent; }
+.nav-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); padding: 0 10px; margin: 8px 0 2px; }
 .side-foot { margin-top: auto; padding: 0 10px; font-size: 12px; color: var(--muted); display: grid; gap: 4px; }
 
 main { padding: 28px clamp(16px, 4vw, 44px) 60px; min-width: 0; max-width: 1180px; }
 .head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }
 .head h1 { font: 700 clamp(24px, 3vw, 32px)/1.1 var(--f-display); margin: 0; letter-spacing: -0.015em; text-wrap: balance; }
-.head p { margin: 6px 0 0; color: var(--muted); max-width: 62ch; }
-.btn { border: 1px solid var(--line); background: var(--panel); padding: 7px 14px; border-radius: 8px; font-weight: 500; display: inline-flex; align-items: center; gap: 7px; }
+.head p { margin: 6px 0 0; color: var(--muted); max-width: 64ch; }
+.btn { border: 1px solid var(--line); background: var(--panel); padding: 7px 14px; border-radius: 8px; font-weight: 500; display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
 .btn:hover { border-color: var(--muted); }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-:root[data-theme="dark"] .btn.primary { color: #0d1115; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn.primary { color: #0d1115; } }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.danger { background: var(--crit); border-color: var(--crit); color: var(--on-accent); }
+.btn.ai { color: var(--ai); border-color: color-mix(in srgb, var(--ai) 35%, var(--line)); background: var(--ai-soft); }
+.btn.ghost { border-color: transparent; background: none; color: var(--muted); padding-inline: 8px; }
+.btn.ghost:hover { color: var(--ink); background: var(--sunk); }
 .btn.small { padding: 4px 10px; font-size: 13px; }
-.btn:disabled { opacity: .55; cursor: default; }
+.btn:disabled { opacity: .5; cursor: default; }
 
 .grid { display: grid; gap: 14px; }
 .g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .g4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.tiles { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 16px 18px; min-width: 0; }
-.card h2 { font: 600 13px/1.3 var(--f-body); text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); margin: 0 0 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.card h2 { font: 600 12.5px/1.3 var(--f-body); text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); margin: 0 0 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.card h2 .aside { text-transform: none; letter-spacing: 0; font-weight: 400; }
 .span2 { grid-column: span 2; }
 .span-all { grid-column: 1 / -1; }
 
 .stat .v { font: 500 26px/1.1 var(--f-mono); letter-spacing: -0.02em; }
 .stat .v small { font-size: 14px; color: var(--muted); margin-left: 3px; }
-.stat .k { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
+.stat .k { color: var(--muted); font-size: 12.5px; margin-top: 5px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 
 .pill { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
 .pill.ok { background: var(--ok-soft); color: var(--ok); }
 .pill.warn { background: var(--warn-soft); color: var(--warn); }
 .pill.crit { background: var(--crit-soft); color: var(--crit); }
 .pill.info { background: var(--accent-soft); color: var(--accent); }
+.pill.ai { background: var(--ai-soft); color: var(--ai); }
 .pill.sample { background: var(--sunk); color: var(--muted); border: 1px dashed var(--line); font-weight: 500; }
+.pill.live::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: blink 1.2s infinite; }
+@keyframes blink { 50% { opacity: .25; } }
 
 .kv { display: grid; grid-template-columns: auto 1fr; gap: 7px 18px; margin: 0; }
 .kv dt { color: var(--muted); }
 .kv dd { margin: 0; text-align: right; font-family: var(--f-mono); font-size: 13px; font-variant-numeric: tabular-nums; }
 
-.issues { display: flex; flex-direction: column; }
-.issue { display: grid; grid-template-columns: 4px 1fr auto; gap: 14px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); }
-.issue:first-child { border-top: 0; padding-top: 2px; }
-.issue .bar { align-self: stretch; border-radius: 2px; background: var(--ok); }
-.issue .bar.warn { background: var(--warn); } .issue .bar.crit { background: var(--crit); } .issue .bar.info { background: var(--accent); }
-.issue b { font-weight: 600; display: block; }
-.issue span { color: var(--muted); font-size: 13px; }
-.issue .acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+/* Findings: grouped by severity, roomy rows */
+.fgroup + .fgroup { margin-top: 22px; }
+.fgroup-h { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; margin-bottom: 8px; }
+.fgroup-h .count { color: var(--muted); font-weight: 400; }
+.finding { display: grid; grid-template-columns: 38px 1fr auto; gap: 16px; align-items: start; padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.finding + .finding { margin-top: 10px; }
+.finding .ic { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; }
+.finding .ic.warn { background: var(--warn-soft); color: var(--warn); } .finding .ic.crit { background: var(--crit-soft); color: var(--crit); } .finding .ic.info { background: var(--accent-soft); color: var(--accent); }
+.finding h3 { margin: 0; font: 600 15px/1.35 var(--f-body); }
+.finding p { margin: 4px 0 0; color: var(--muted); max-width: 70ch; }
+.finding .meta { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; align-items: center; font-size: 12.5px; color: var(--muted); }
+.finding .acts { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+.explain { margin-top: 12px; padding: 12px 14px; border-radius: 8px; background: var(--ai-soft); border: 1px solid color-mix(in srgb, var(--ai) 25%, transparent); }
+.explain .who { font-size: 12px; font-weight: 600; color: var(--ai); display: flex; gap: 6px; align-items: center; margin-bottom: 4px; }
+.explain p { color: var(--ink); margin: 0; max-width: 72ch; }
 
 .meter { height: 8px; border-radius: 99px; background: var(--sunk); overflow: hidden; display: flex; box-shadow: inset 0 0 0 1px var(--line); }
-.meter i { display: block; height: 100%; }
+.meter i { display: block; height: 100%; transition: width .4s; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; font-size: 12.5px; color: var(--muted); }
 .legend span::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 2px; background: var(--c); margin-right: 6px; vertical-align: -1px; }
 
 table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
-th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; padding: 0 8px 8px 0; border-bottom: 1px solid var(--line); }
-td { padding: 9px 8px 9px 0; border-bottom: 1px solid var(--line); vertical-align: middle; }
+th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; padding: 0 10px 8px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 9px 10px 9px 0; border-bottom: 1px solid var(--line); vertical-align: middle; }
 tr:last-child td { border-bottom: 0; }
 td.num, th.num { text-align: right; font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
 .tw { overflow-x: auto; }
-.trunc { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trunc { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+tr.confirm td { background: var(--crit-soft); }
 
 .score { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; }
 .score svg { flex: none; }
 .score .num { font: 700 44px/1 var(--f-display); }
-.score h3 { margin: 0 0 4px; font: 600 18px/1.25 var(--f-display); }
-.score p { margin: 0; color: var(--muted); max-width: 46ch; }
+.score h3 { margin: 0 0 4px; font: 600 19px/1.25 var(--f-display); }
+.score p { margin: 0; color: var(--muted); max-width: 52ch; }
 
-.switch { position: relative; width: 34px; height: 20px; flex: none; }
+.switch { position: relative; width: 34px; height: 20px; flex: none; display: inline-block; }
 .switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
 .switch i { position: absolute; inset: 0; border-radius: 99px; background: var(--line); transition: background .15s; pointer-events: none; }
 .switch i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--panel); transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
 .switch input:checked + i { background: var(--ok); }
 .switch input:checked + i::after { transform: translateX(14px); }
-.switch input:focus-visible + i { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-.cores { display: grid; grid-template-columns: repeat(10, 1fr); gap: 6px; align-items: end; height: 120px; }
-.core { display: flex; flex-direction: column; align-items: center; gap: 5px; height: 100%; justify-content: flex-end; }
-.core .col { width: 100%; background: var(--sunk); border-radius: 4px; flex: 1; position: relative; overflow: hidden; box-shadow: inset 0 0 0 1px var(--line); }
-.core .col i { position: absolute; left: 0; right: 0; bottom: 0; background: var(--accent); transition: height .5s; border-radius: 0 0 4px 4px; }
-.core.e .col i { background: color-mix(in srgb, var(--accent) 55%, var(--panel)); }
-.core small { font: 11px var(--f-mono); color: var(--muted); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; padding: 2px; background: var(--sunk); }
+.seg button { border: 0; background: none; padding: 4px 10px; border-radius: 6px; color: var(--muted); font-size: 13px; font-weight: 500; }
+.seg button[aria-pressed="true"] { background: var(--panel); color: var(--ink); box-shadow: 0 0 0 1px var(--line); }
+
+.bars { display: grid; gap: 6px; align-items: end; height: 120px; }
+.bar { display: flex; flex-direction: column; align-items: center; gap: 5px; height: 100%; justify-content: flex-end; }
+.bar .col { width: 100%; background: var(--sunk); border-radius: 4px; flex: 1; position: relative; overflow: hidden; box-shadow: inset 0 0 0 1px var(--line); }
+.bar .col i { position: absolute; left: 0; right: 0; bottom: 0; background: var(--accent); transition: height .5s; }
+.bar small { font: 11px var(--f-mono); color: var(--muted); }
+.spark { width: 100%; height: 80px; display: block; }
+
+/* Battery charging visual */
+.batt-hero { display: grid; grid-template-columns: auto 1fr; gap: 28px; align-items: center; }
+.cell { position: relative; width: 150px; height: 74px; border: 3px solid var(--ink); border-radius: 14px; padding: 5px; }
+.cell::after { content: ""; position: absolute; right: -11px; top: 22px; width: 6px; height: 24px; border-radius: 0 4px 4px 0; background: var(--ink); }
+.cell .fill { height: 100%; border-radius: 8px; background: var(--ok); position: relative; overflow: hidden; transition: width .6s; }
+.cell.charging .fill::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(115deg, transparent 0 14px, rgba(255,255,255,.28) 14px 26px); background-size: 60px 100%; animation: flow 1.1s linear infinite; }
+@keyframes flow { to { background-position: 60px 0; } }
+.cell .bolt { position: absolute; inset: 0; display: grid; place-items: center; }
+.batt-hero h3 { margin: 0; font: 700 34px/1 var(--f-display); }
+.batt-hero p { margin: 6px 0 0; color: var(--muted); }
+.flow svg { width: 100%; height: auto; display: block; }
+.flow .wire { fill: none; stroke-linecap: round; }
+.flow .wire.anim { stroke-dasharray: 2 12; animation: dash 0.9s linear infinite; }
+@keyframes dash { to { stroke-dashoffset: -14; } }
+
+/* Speed test */
+.speed { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 20px; align-items: center; }
+.gauge-num { font: 500 48px/1 var(--f-mono); letter-spacing: -0.03em; }
+.gauge-num small { font-size: 16px; color: var(--muted); margin-left: 4px; }
+.steps { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.step { font-size: 12.5px; padding: 3px 10px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); display: inline-flex; gap: 6px; align-items: center; }
+.step.active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.step.done { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--line)); }
+.progress { height: 6px; border-radius: 99px; background: var(--sunk); overflow: hidden; margin-top: 14px; box-shadow: inset 0 0 0 1px var(--line); }
+.progress i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s linear; }
+
+/* Assistant */
+.chat { display: flex; flex-direction: column; gap: 14px; }
+.msg { max-width: 76ch; padding: 12px 14px; border-radius: 12px; }
+.msg.me { align-self: flex-end; background: var(--accent); color: var(--on-accent); border-bottom-right-radius: 4px; }
+.msg.bot { align-self: flex-start; background: var(--panel); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+.msg.bot .who { font-size: 12px; font-weight: 600; color: var(--ai); margin-bottom: 4px; display: flex; gap: 6px; align-items: center; }
+.msg .used { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); align-items: center; }
+.msg .used span { border: 1px solid var(--line); border-radius: 99px; padding: 1px 8px; font-family: var(--f-mono); font-size: 11.5px; }
+.ask { display: flex; gap: 8px; margin-top: 16px; }
+.ask input { flex: 1; min-width: 0; border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 10px 14px; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { border: 1px solid var(--line); background: var(--panel); border-radius: 99px; padding: 6px 12px; font-size: 13px; }
+.chip:hover { border-color: var(--ai); color: var(--ai); }
+.caret::after { content: "▍"; color: var(--ai); animation: blink 1s infinite; }
 
 .kbd { display: flex; flex-direction: column; gap: 5px; overflow-x: auto; padding-bottom: 4px; }
 .krow { display: flex; gap: 5px; }
-.key { flex: var(--w, 1) 0 0; min-width: 30px; height: 34px; border: 1px solid var(--line); border-radius: 6px; background: var(--sunk); display: grid; place-items: center; font: 11px var(--f-mono); color: var(--muted); transition: background .1s; }
+.key { flex: var(--w, 1) 0 0; min-width: 30px; height: 34px; border: 1px solid var(--line); border-radius: 6px; background: var(--sunk); display: grid; place-items: center; font: 11px var(--f-mono); color: var(--muted); }
 .key.down { background: var(--accent); color: var(--panel); border-color: var(--accent); }
 .key.done { background: var(--ok-soft); color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--line)); }
 
-.scanbar { height: 3px; background: var(--sunk); border-radius: 99px; overflow: hidden; margin-top: 14px; }
-.scanbar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .25s; }
 .note { font-size: 12.5px; color: var(--muted); margin-top: 10px; }
 .toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 8px; font-size: 13.5px; z-index: 50; max-width: calc(100% - 32px); }
-.pixel { position: fixed; inset: 0; z-index: 60; display: grid; place-items: end center; padding-bottom: 30px; cursor: pointer; }
-.pixel span { background: rgba(0,0,0,.55); color: #fff; padding: 6px 12px; border-radius: 6px; font-size: 13px; }
-.spark { width: 100%; height: 70px; display: block; }
-textarea.rep { width: 100%; min-height: 260px; font: 12.5px/1.55 var(--f-mono); background: var(--sunk); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 12px; resize: vertical; }
+textarea.rep { width: 100%; min-height: 280px; font: 12.5px/1.55 var(--f-mono); background: var(--sunk); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 12px; resize: vertical; }
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .spread { justify-content: space-between; }
+.proposal { border: 1px dashed color-mix(in srgb, var(--ai) 45%, var(--line)); border-radius: var(--r); padding: 12px 16px; background: color-mix(in srgb, var(--ai-soft) 50%, var(--panel)); font-size: 13.5px; }
+.proposal b { color: var(--ai); }
 
-@media (max-width: 980px) { .g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .g3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 980px) { .g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .g3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .speed { grid-template-columns: 1fr; } }
 @media (max-width: 760px) {
   .shell { grid-template-columns: 1fr; }
   .side { position: sticky; top: env(safe-area-inset-top, 0px); height: auto; z-index: 10; background: var(--bg); border-right: 0; border-bottom: 1px solid var(--line); padding: 12px 16px 8px; gap: 10px; }
@@ -164,567 +225,654 @@ textarea.rep { width: 100%; min-height: 260px; font: 12.5px/1.55 var(--f-mono); 
   .nav-label, .side-foot { display: none; }
   .g2, .g3 { grid-template-columns: 1fr; }
   .span2 { grid-column: auto; }
-  .issue { grid-template-columns: 4px 1fr; }
-  .issue .acts { grid-column: 2; justify-content: flex-start; }
+  .finding { grid-template-columns: 38px 1fr; }
+  .finding .acts { grid-column: 2; flex-direction: row; flex-wrap: wrap; }
+  .batt-hero { grid-template-columns: 1fr; }
 }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 </style>
 
 <div class="shell">
   <aside class="side">
     <div class="brand">
-      <svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><rect x="1" y="1" width="28" height="28" rx="8" fill="var(--accent)"/><path d="M6 16h4l2.5-6 4 11 2.5-5H24" fill="none" stroke="var(--panel)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><rect x="1" y="1" width="28" height="28" rx="8" fill="var(--accent)"/><path d="M4 16h6l2.5-6.5 4 12 2.5-5.5H26" fill="none" stroke="var(--panel)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <div><b>DiagnoMac</b><small>MacBook Pro · M5</small></div>
     </div>
-    <div>
-      <div class="nav-label">Checks</div>
-      <nav class="nav" id="nav"></nav>
-    </div>
+    <nav class="nav" id="nav" aria-label="Sections"></nav>
     <div class="side-foot">
-      <span>Snapshot taken 1 Oct 2026, 16:56</span>
-      <span>Prototype · no changes made to this Mac</span>
+      <span>Snapshot from 1 Oct 2026, 17:55</span>
+      <span>Prototype v2 · nothing on this Mac changes</span>
     </div>
   </aside>
   <main id="main"></main>
 </div>
 
 <script>
+/* ---------- Data: real readings from this Mac unless tagged as sample ---------- */
 const D = {
-  machine: { model: "MacBook Pro (Mac17,2)", chip: "Apple M5", cores: "10 (4 Super, 6 Efficiency)", gpu: "10-core", mem: "24 GB", disk: "1 TB SSD (APPLE SSD AP1024Z)", os: "macOS 27.0.1 (26A434)", uptime: "9 h 23 min", firmware: "20457.1.29", displays: "Built-in XDR 3024×1964 · External 1920×1080" },
-  battery: { pct: 100, cycles: 16, maxCap: 100, design: 6249, full: 6351, nominal: 6503, remaining: 6337, condition: "Normal", source: "Battery", tte: 292, charger: "Not connected" },
-  load: [6.45, 4.45, 3.09],
-  procs: [
-    ["WindowServer", 51.3, 0.5, "System"], ["Claude Helper (Renderer)", 18.7, 2.7, "Claude"], ["DynamicIsland", 17.9, 0.3, "Dynamic Island"],
-    ["Claude Helper", 14.5, 0.3, "Claude"], ["claude (Claude Code)", 10.9, 1.4, "Claude"], ["Music", 8.8, 0.9, "Apple"], ["zsh", 6.7, 0.0, "System"]
-  ],
-  mem: { total: 24, wired: 3.01, active: 5.76, inactive: 5.71, free: 1.41, compressedOther: 8.11, swapUsed: 2.83, swapTotal: 4.0, freePct: 55, pageouts: 25648 },
-  disk: { cap: 994.6, free: 333.4, smart: "Verified", fs: "APFS (encrypted)" },
+  machine: { model: "MacBook Pro (Mac17,2)", chip: "Apple M5", cores: "10 CPU (4 Super, 6 Efficiency) · 10-core GPU", mem: "24 GB", disk: "1 TB SSD", os: "macOS 27.0.1 (26A434)", uptime: "10 h 22 min" },
+  battery: { pct: 95, cycles: 16, maxCap: 100, design: 6249, full: 6362, condition: "Normal", tte: 295, ttf: 20,
+    voltage: 13.28, amps: 2.575, adapter: "70W USB-C Power Adapter", adapterW: 68, adapterV: 20, systemIn: 49.8, systemLoad: 15.6, battIn: 34.2, loss: 1.4 },
+  load: [6.01, 4.11, 3.51],
+  gpu: { device: 13, renderer: 13, tiler: 10, inUse: 0.61, alloc: 4.93 },
+  procs: [["WindowServer", 46.8, "142 MB", "System"], ["siriknowledged", 38.0, "34 MB", "System"], ["DynamicIsland", 36.7, "123 MB", "Dynamic Island"],
+          ["Claude Helper (Renderer)", 14.5, "690 MB", "Claude"], ["syspolicyd", 13.4, "22 MB", "System"], ["Music", 8.9, "255 MB", "Music"], ["Raycast", 5.8, "133 MB", "Raycast"]],
+  mem: { total: 24, wired: 3.0, app: 6.1, compressed: 4.2, cached: 6.3, other: 3.0, free: 1.4, swapUsed: 2.72, swapTotal: 4.0, avail: 57, pageouts: 25917 },
+  disk: { cap: 994.6, free: 344.3, used: 650.3, smart: "Verified" },
   clean: [
-    ["iOS 27.0 Simulator runtime", 18.56, "/Library/Developer/CoreSimulator", true],
-    ["User caches", 7.4, "~/Library/Caches", true],
-    ["Xcode DerivedData", 4.2, "~/Library/Developer/Xcode/DerivedData", false],
-    ["Homebrew download cache", 1.9, "~/Library/Caches/Homebrew", false],
-    ["Trash", 0.8, "~/.Trash", false]
+    { id: "sim", t: "Unavailable simulators", gb: 23.5, path: "~/Library/Developer/CoreSimulator/Devices", how: "Removed by Xcode's simctl. Size shown is all simulators.", count: false },
+    { id: "cache", t: "User caches", gb: 8.0, path: "~/Library/Caches", how: "Moved to the Trash. Apps rebuild them as needed.", count: true },
+    { id: "logs", t: "User logs", gb: 0.1, path: "~/Library/Logs", how: "Moved to the Trash. Check Crash Logs first.", count: true },
+    { id: "dd", t: "Xcode DerivedData", gb: 0.04, path: "~/Library/Developer/Xcode/DerivedData", how: "Moved to the Trash. Rebuilt on the next build.", count: true }
+  ],
+  apps: [
+    { n: "Claude", kind: "Window", gb: 1.69, cpu: 14.5, procs: 25, note: "Running this conversation" },
+    { n: "Microsoft Teams", kind: "Window", gb: 1.26, cpu: 0.0, procs: 14 },
+    { n: "Slack", kind: "Window", gb: 0.48, cpu: 0.0, procs: 6 },
+    { n: "Music", kind: "Window", gb: 0.43, cpu: 2.5, procs: 1 },
+    { n: "Microsoft Outlook", kind: "Window", gb: 0.35, cpu: 0.0, procs: 1 },
+    { n: "Cliq", kind: "Window", gb: 0.33, cpu: 0.0, procs: 7 },
+    { n: "Docker", kind: "Menu bar", gb: 0.32, cpu: 2.4, procs: 8 },
+    { n: "WhatsApp", kind: "Window", gb: 0.25, cpu: 0.2, procs: 3 },
+    { n: "3uTools", kind: "Window", gb: 0.23, cpu: 0.2, procs: 5 },
+    { n: "DiagnoMac", kind: "Window", gb: 0.17, cpu: 0.0, procs: 1, self: true },
+    { n: "Raycast", kind: "Menu bar", gb: 0.13, cpu: 5.8, procs: 2 },
+    { n: "Mail", kind: "Window", gb: 0.12, cpu: 0.0, procs: 2 },
+    { n: "Safari", kind: "Window", gb: 0.10, cpu: 0.1, procs: 3, note: "Web pages run in separate WebKit processes" },
+    { n: "Google Drive", kind: "Background", gb: 0.08, cpu: 0.0, procs: 4 },
+    { n: "Dynamic Island", kind: "Menu bar", gb: 0.08, cpu: 36.7, procs: 1 },
+    { n: "Messages", kind: "Window", gb: 0.08, cpu: 0.0, procs: 3 },
+    { n: "Finder", kind: "Window", gb: 0.06, cpu: 1.6, procs: 1, self: true, note: "macOS reopens Finder automatically" },
+    { n: "Activity Monitor", kind: "Window", gb: 0.06, cpu: 0.2, procs: 1 }
   ],
   startup: [
-    ["com.epicgames.launcher", "Epic Games", "User agent", true, "Launches the Epic Games Launcher at login."],
-    ["com.google.GoogleUpdater.wake", "Google", "User agent", true, "Wakes Google Updater on a schedule."],
-    ["com.google.keystone.agent", "Google", "User agent", true, "Legacy Google updater."],
-    ["com.google.keystone.xpcservice", "Google", "User agent", true, "Legacy Google updater helper."],
-    ["sh.brew.mlx-lm", "Homebrew", "User agent", true, "Runs the mlx-lm service at login. Uses GPU and memory while idle."],
-    ["com.google.keystone.agent", "Google", "System agent", true, "Same updater, installed system-wide."],
-    ["com.google.keystone.xpcservice", "Google", "System agent", true, "Same updater helper, installed system-wide."],
-    ["com.microsoft.update.agent", "Microsoft", "System agent", true, "Microsoft AutoUpdate."]
+    ["com.epicgames.launcher", "Epic Games", "User agent", true], ["com.google.GoogleUpdater.wake", "Google", "User agent", true],
+    ["com.google.keystone.agent", "Google", "User agent", true], ["com.google.keystone.xpcservice", "Google", "User agent", true],
+    ["sh.brew.mlx-lm", "Homebrew", "User agent", true], ["com.microsoft.update.agent", "Microsoft", "System agent", true]
   ],
-  security: [
-    ["FileVault disk encryption", "ok", "On", "Your data is encrypted at rest."],
-    ["System Integrity Protection", "ok", "Enabled", "Protects system files from modification."],
-    ["Gatekeeper", "ok", "Enabled", "Only signed, notarized apps open without a warning."],
-    ["Firewall", "crit", "Off", "Incoming connections are not filtered. Turn it on in System Settings → Network → Firewall."],
-    ["macOS version", "ok", "27.0.1", "macOS 27 installed 16 Sep 2026."],
-    ["Activation Lock", "ok", "Enabled", "Find My protects this Mac if it is lost."]
-  ],
-  crashes: [
-    ["Dynamic Island", 14, "1 Oct 2026", "EXC_BAD_ACCESS"],
-    ["Music", 6, "29 Sep 2026", "Hang (resource)"],
-    ["Epic Games Launcher", 5, "27 Sep 2026", "EXC_CRASH (SIGABRT)"],
-    ["Safari Web Content", 3, "24 Sep 2026", "Jetsam (memory)"]
-  ]
+  security: [["FileVault disk encryption", "ok", "On"], ["System Integrity Protection", "ok", "Enabled"], ["Gatekeeper", "ok", "Enabled"],
+             ["Firewall", "ok", "On"], ["XProtect malware definitions", "ok", "v5363"], ["Device management (MDM)", "ok", "Not managed"]],
+  crashes: [["intelligencetasksd", 34, "Crash", true], ["AppIntentsLiveEntityService", 9, "Crash", true], ["Dynamic Island", 4, "Crash", false], ["Music", 2, "Hang", true]],
+  bt: [["BT5.4 Mouse", "Mouse", 62], ["oraimo SpaceBuds", "Headphones", 40], ["TCL S522W", "Headphones", null], ["Bedroom TV", "Speaker", null], ["Manuel", "Phone", null]]
+};
+
+const ICON = {
+  warn: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 21h20L12 3z"/><path d="M12 10v5M12 18h.01"/></svg>',
+  crit: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16.5h.01"/></svg>',
+  info: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/></svg>',
+  spark: '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8z"/><path d="M19 15l.9 2.6 2.6.9-2.6.9L19 22l-.9-2.6-2.6-.9 2.6-.9z"/></svg>',
+  bolt: '<svg width="30" height="30" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z" fill="var(--panel)" stroke="var(--ink)" stroke-width="1.2" stroke-linejoin="round"/></svg>'
 };
 
 const ISSUES = [
-  { id: "fw", sev: "crit", area: "security", t: "Firewall is off", d: "Incoming connections to this Mac are not filtered.", fix: "Turn on firewall" },
-  { id: "swap", sev: "warn", area: "memory", t: "Swap is 71% full", d: "2.83 of 4.0 GB swap in use with 25,648 page-outs. Apps are being pushed out of RAM.", fix: "Show memory hogs" },
-  { id: "load", sev: "warn", area: "performance", t: "High CPU load", d: "Load average 6.45 on 10 cores. WindowServer at 51% CPU, often caused by an external display or animated menu bar apps.", fix: "View processes" },
-  { id: "space", sev: "info", area: "storage", t: "26 GB can be reclaimed", d: "The iOS Simulator runtime and user caches take the most space.", fix: "Review cleanup" },
-  { id: "startup", sev: "info", area: "startup", t: "8 background agents load at login", d: "Five are updaters from Google, Microsoft and Epic. One runs a local LLM service.", fix: "Review startup items" },
-  { id: "crash", sev: "info", area: "logs", t: "Dynamic Island crashed 14 times", d: "Repeated crashes in the last week. Updating or removing the app may help.", fix: "View crash logs" }
+  { id: "swap", sev: "warn", area: "memory", t: "Swap is 68% full", d: "2.72 of 4.00 GB of swap in use, with 25,917 page-outs. Microsoft Teams is holding 1.26 GB while idle.", fix: "Relieve memory",
+    ai: "Your Mac has run out of fast memory and is storing some app data on the SSD instead, which makes switching apps slower. Quitting idle apps such as Microsoft Teams and Slack frees about 1.7 GB straight away. Restarting clears swap completely; you've been up for over 10 hours." },
+  { id: "tm", sev: "warn", area: "storage", t: "No Time Machine backup", d: "No backup disk is set up. If this SSD fails or the Mac is lost, your files can't be recovered.", fix: "Set up backup",
+    ai: "Nothing on this Mac is being backed up. Time Machine can back up to any external drive or a network disk and keeps hourly copies. Even a 1 TB USB drive is enough for your 650 GB of data." },
+  { id: "apps", sev: "info", area: "apps", t: "4 idle apps are using 2.4 GB", d: "Microsoft Teams, Slack, Outlook and Cliq have used no CPU recently but still hold memory.", fix: "Review apps",
+    ai: "These apps are open but doing nothing. Quitting them frees memory and reduces swap. You'll still get notifications from your phone, and you can reopen them when you need them." },
+  { id: "load", sev: "info", area: "performance", t: "High CPU load", d: "Load average 6.01 on 10 cores. WindowServer is at 47% and Dynamic Island at 37%.", fix: "View processes",
+    ai: "WindowServer draws everything on screen. Its usage is high because of the external 1080p display and the animated Dynamic Island menu bar app. Quitting Dynamic Island should bring WindowServer down noticeably." },
+  { id: "space", sev: "info", area: "storage", t: "8 GB can be reclaimed", d: "User caches are the largest. Unavailable simulators may free more.", fix: "Review cleanup",
+    ai: "Caches are temporary files apps keep to load faster. They're safe to clear because apps recreate them, although first launches may be a little slower afterwards." },
+  { id: "crash", sev: "info", area: "logs", t: "intelligencetasksd crashed 34 times", d: "A macOS system process crashing repeatedly this week.", fix: "View crash logs",
+    ai: "intelligencetasksd is part of Apple Intelligence and runs background tasks such as summaries. It's an Apple process, so you can't update it separately; the next macOS update usually fixes this. If it keeps happening, report it with Feedback Assistant." }
 ];
 
 const VIEWS = [
-  ["overview", "Overview"], ["battery", "Battery"], ["performance", "Performance"], ["memory", "Memory"], ["storage", "Storage"],
-  ["network", "Network"], ["security", "Security"], ["startup", "Startup items"], ["hardware", "Hardware tests"], ["logs", "Crash logs"], ["report", "Report"]
+  ["overview", "Overview"], ["assistant", "Assistant", "new"], ["apps", "Running Apps", "new"],
+  ["battery", "Battery"], ["performance", "CPU & GPU"], ["memory", "Memory"], ["storage", "Storage"], ["network", "Network"],
+  ["security", "Security"], ["startup", "Startup Items"], ["devices", "Devices", "idea"], ["hardware", "Hardware Tests"], ["logs", "Crash Logs"], ["report", "Report"]
 ];
-const STATE = { view: "overview", fixed: new Set(), startup: D.startup.map(s => s[3]) };
-try { const v = localStorage.getItem("dm-view"); if (v && VIEWS.some(x => x[0] === v)) STATE.view = v; } catch (e) {}
+const STATE = { view: "overview", fixed: new Set(), explained: new Set(), charging: true, quit: new Set(), pendingQuit: null, appFilter: "all",
+  clean: new Set(), startup: D.startup.map(s => s[3]), chat: [], speed: { running: false, phase: -1, t: 0, down: null, up: null, rpm: null, series: [] } };
+try { const v = localStorage.getItem("dm2-view"); if (v && VIEWS.some(x => x[0] === v)) STATE.view = v; } catch (e) {}
 
-function sevOf(area) {
-  const open = ISSUES.filter(i => i.area === area && !STATE.fixed.has(i.id));
-  if (open.some(i => i.sev === "crit")) return "crit";
-  if (open.some(i => i.sev === "warn")) return "warn";
-  return ["report", "hardware"].includes(area) ? "none" : "ok";
-}
-function score() {
-  let s = 100;
-  ISSUES.forEach(i => { if (!STATE.fixed.has(i.id)) s -= i.sev === "crit" ? 12 : i.sev === "warn" ? 6 : 1; });
-  return s;
-}
 const $ = s => document.querySelector(s);
 const pill = (sev, txt) => `<span class="pill ${sev}">${txt}</span>`;
-const SAMPLE = `<span class="pill sample" title="Illustrative data. The native app will read this from your Mac.">Sample data</span>`;
-const LIVE_SIM = `<span class="pill sample" title="Values animate to show the live view. They are not real readings.">Simulated live</span>`;
+const SAMPLE = `<span class="pill sample" title="Illustrative. The app reads this from your Mac.">Sample</span>`;
+const SIM = `<span class="pill sample" title="Animated to show the live view. Not a real reading.">Simulated live</span>`;
+const AIPILL = `<span class="pill ai">${ICON.spark} On-device AI</span>`;
+const open = () => ISSUES.filter(i => !STATE.fixed.has(i.id) && !(i.id === "apps" && STATE.quit.size >= 3));
+function score() { return Math.max(0, 100 - open().reduce((s, i) => s + (i.sev === "crit" ? 12 : i.sev === "warn" ? 6 : 1), 0)); }
+function sevOf(area) {
+  const o = open().filter(i => i.area === area);
+  if (o.some(i => i.sev === "crit")) return "crit";
+  if (o.some(i => i.sev === "warn")) return "warn";
+  if (o.some(i => i.sev === "info")) return "info";
+  return ["report", "hardware", "assistant", "overview", "devices"].includes(area) ? "none" : "ok";
+}
 function toast(msg) {
   const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; t.setAttribute("role", "status");
-  document.body.appendChild(t); setTimeout(() => t.remove(), 2600);
+  document.body.appendChild(t); setTimeout(() => t.remove(), 2800);
 }
-
-function renderNav() {
-  $("#nav").innerHTML = VIEWS.map(([k, n]) =>
-    `<button data-view="${k}" ${STATE.view === k ? 'aria-current="page"' : ""}>${n}<i class="dot ${sevOf(k)}"></i></button>`).join("");
+function header(title, sub, actions = "") { return `<div class="head"><div><h1>${title}</h1><p>${sub}</p></div><div class="row">${actions}</div></div>`; }
+function ring(val, size, col) {
+  const r = size / 2 - 7, c = 2 * Math.PI * r, f = val / 100;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" aria-hidden="true"><circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="var(--sunk)" stroke-width="9"/><circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${col}" stroke-width="9" stroke-linecap="round" stroke-dasharray="${c*f} ${c}" transform="rotate(-90 ${size/2} ${size/2})"/></svg>`;
 }
-function go(view) {
-  STATE.view = view; try { localStorage.setItem("dm-view", view); } catch (e) {}
-  stopTimers(); renderNav(); $("#main").innerHTML = R[view](); after[view] && after[view]();
-  window.scrollTo(0, 0);
-}
-document.addEventListener("click", e => {
-  const nv = e.target.closest("[data-view]"); if (nv) { go(nv.dataset.view); return; }
-  const fx = e.target.closest("[data-fix]"); if (fx) { doFix(fx.dataset.fix); return; }
-});
-function doFix(id) {
-  const is = ISSUES.find(i => i.id === id);
-  if (id === "fw") { STATE.fixed.add("fw"); toast("Firewall would be turned on (prototype: nothing changed)"); renderNav(); go(STATE.view); return; }
-  go(is.area);
-}
-
-function header(title, sub, actions = "") {
-  return `<div class="head"><div><h1>${title}</h1><p>${sub}</p></div><div class="row">${actions}</div></div>`;
-}
-function ring(val, max, size, col) {
-  const r = size / 2 - 7, c = 2 * Math.PI * r, f = Math.max(0, Math.min(1, val / max));
-  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" aria-hidden="true">
-    <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="var(--sunk)" stroke-width="9"/>
-    <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${col}" stroke-width="9" stroke-linecap="round"
-      stroke-dasharray="${c * f} ${c}" transform="rotate(-90 ${size/2} ${size/2})"/></svg>`;
+function sparkSVG(id, series, max, color = "var(--accent)") {
+  const n = Math.max(series.length, 2), pts = series.map((v, i) => `${(i * 300 / (n - 1)).toFixed(1)},${(76 - (v / max) * 70).toFixed(1)}`);
+  const last = pts[pts.length - 1];
+  return `<svg class="spark" id="${id}" viewBox="0 0 300 80" preserveAspectRatio="none" aria-hidden="true">
+    <line x1="0" y1="41" x2="300" y2="41" stroke="var(--line)" stroke-dasharray="3 4"/>
+    ${series.length > 1 ? `<polygon fill="color-mix(in srgb, ${color} 15%, transparent)" points="0,80 ${pts.join(" ")} ${last.split(",")[0]},80"/><polyline fill="none" stroke="${color}" stroke-width="1.8" points="${pts.join(" ")}"/><circle cx="${last.split(",")[0]}" cy="${last.split(",")[1]}" r="3.5" fill="${color}"/>` : ""}</svg>`;
 }
 
 const timers = [];
 function stopTimers() { while (timers.length) clearInterval(timers.pop()); }
+function renderNav() {
+  $("#nav").innerHTML = VIEWS.map(([k, n, tag]) =>
+    `<button data-view="${k}" ${STATE.view === k ? 'aria-current="page"' : ""}><span>${n}${tag ? ` <span class="new">${tag}</span>` : ""}</span><i class="dot ${sevOf(k)}"></i></button>`).join("");
+}
+function go(view, keepScroll) {
+  STATE.view = view; try { localStorage.setItem("dm2-view", view); } catch (e) {}
+  stopTimers(); renderNav(); $("#main").innerHTML = R[view](); after[view] && after[view]();
+  if (!keepScroll) window.scrollTo(0, 0);
+}
+const rerender = () => go(STATE.view, true);
 
+document.addEventListener("click", e => {
+  const el = e.target.closest("[data-view],[data-fix],[data-explain],[data-quit],[data-confirm-quit],[data-cancel-quit],[data-ask],[data-filter],[data-charge]");
+  if (!el) return;
+  if (el.dataset.view) return go(el.dataset.view);
+  if (el.dataset.fix) {
+    const is = ISSUES.find(i => i.id === el.dataset.fix);
+    if (is.id === "tm") { toast("Would open System Settings → Time Machine"); return; }
+    return go(is.area);
+  }
+  if (el.dataset.explain) { STATE.explained.add(el.dataset.explain); rerender(); return; }
+  if (el.dataset.quit) { STATE.pendingQuit = el.dataset.quit; rerender(); return; }
+  if (el.dataset.cancelQuit !== undefined) { STATE.pendingQuit = null; rerender(); return; }
+  if (el.dataset.confirmQuit) { STATE.quit.add(el.dataset.confirmQuit); STATE.pendingQuit = null; toast(`Would quit ${el.dataset.confirmQuit} (prototype)`); renderNav(); rerender(); return; }
+  if (el.dataset.ask) { if (STATE.view !== "assistant") go("assistant"); ask(el.dataset.ask); return; }
+  if (el.dataset.filter) { STATE.appFilter = el.dataset.filter; rerender(); return; }
+  if (el.dataset.charge) { STATE.charging = el.dataset.charge === "1"; rerender(); return; }
+});
+
+/* ---------- Views ---------- */
 const R = {
   overview() {
-    const s = score(), col = s >= 90 ? "var(--ok)" : s >= 75 ? "var(--warn)" : "var(--crit)";
-    const open = ISSUES.filter(i => !STATE.fixed.has(i.id));
-    const sevRank = { crit: 0, warn: 1, info: 2 };
-    open.sort((a, b) => sevRank[a.sev] - sevRank[b.sev]);
-    const label = { crit: "Fix now", warn: "Attention", info: "Suggestion" };
-    return header("Health overview", "A summary of every check, worst first. Each finding links to the details and a fix.",
-      `<button class="btn primary" id="scan">Run full scan</button>`) + `
+    const s = score(), col = s >= 90 ? "var(--ok)" : s >= 75 ? "var(--warn)" : "var(--crit)", o = open();
+    const groups = [["crit", "Fix now"], ["warn", "Needs attention"], ["info", "Suggestions"]];
+    const b = D.battery;
+    return header("Health overview", "Every check, worst first. Each finding links to the details and a fix.",
+      `<button class="btn primary">Run full scan</button>`) + `
     <div class="grid g3">
       <section class="card span2">
         <div class="score">
-          <div style="position:relative;width:132px;height:132px">${ring(s, 100, 132, col)}
-            <div style="position:absolute;inset:0;display:grid;place-items:center;text-align:center"><div><div class="num">${s}</div><div style="color:var(--muted);font-size:12px">of 100</div></div></div>
-          </div>
+          <div style="position:relative;width:128px;height:128px">${ring(s, 128, col)}
+            <div style="position:absolute;inset:0;display:grid;place-items:center;text-align:center"><div><div class="num">${s}</div><div class="muted" style="font-size:12px">of 100</div></div></div></div>
           <div style="min-width:0;flex:1">
-            <h3>${s >= 90 ? "This Mac is in great shape" : "Good hardware, a few things to tidy up"}</h3>
-            <p>Battery, SSD and security basics are healthy. Memory pressure and CPU load are higher than they should be, and the firewall is off.</p>
-            <div class="row" style="margin-top:12px">${pill("crit", open.filter(i=>i.sev==="crit").length + " fix now")} ${pill("warn", open.filter(i=>i.sev==="warn").length + " attention")} ${pill("info", open.filter(i=>i.sev==="info").length + " suggestions")}</div>
+            <h3>Healthy hardware, memory needs relief</h3>
+            <p>Battery, SSD and security are all in good shape. Two things need attention: swap is filling up, and nothing is being backed up.</p>
           </div>
         </div>
-        <div class="scanbar" id="scanbar" hidden><i></i></div>
-        <div class="note" id="scanmsg" hidden></div>
+        <div class="explain" style="margin-top:16px">
+          <div class="who">${ICON.spark} Summary · written on this Mac by Apple Intelligence</div>
+          <p>Your Mac is slower than it should be mainly because memory is full. Teams, Slack, Outlook and Cliq are sitting idle with 2.4 GB between them. Quit those and restart when convenient. Separately, set up Time Machine: nothing on this Mac is backed up.</p>
+        </div>
       </section>
       <section class="card">
         <h2>This Mac</h2>
-        <dl class="kv">
-          <dt>Model</dt><dd>MacBook Pro</dd><dt>Chip</dt><dd>${D.machine.chip}</dd><dt>Memory</dt><dd>${D.machine.mem}</dd>
-          <dt>Storage</dt><dd>1 TB</dd><dt>macOS</dt><dd>27.0.1</dd><dt>Uptime</dt><dd>${D.machine.uptime}</dd>
-        </dl>
+        <dl class="kv"><dt>Model</dt><dd>MacBook Pro</dd><dt>Chip</dt><dd>Apple M5</dd><dt>Memory</dt><dd>24 GB</dd><dt>Storage</dt><dd>1 TB</dd><dt>macOS</dt><dd>27.0.1</dd><dt>Uptime</dt><dd>${D.machine.uptime}</dd></dl>
       </section>
-      <section class="card span-all">
-        <h2>Findings <span style="text-transform:none;letter-spacing:0;font-weight:400">${open.length} open</span></h2>
-        <div class="issues">${open.length ? open.map(i => `
-          <div class="issue"><i class="bar ${i.sev}"></i>
-            <div><div class="row" style="gap:8px"><b>${i.t}</b>${pill(i.sev, label[i.sev])}</div><span>${i.d}</span></div>
-            <div class="acts"><button class="btn small" data-fix="${i.id}">${i.fix}</button></div>
-          </div>`).join("") : `<p style="color:var(--muted)">Nothing left to fix.</p>`}
+    </div>
+
+    <div class="tiles" style="margin-top:14px">
+      <section class="card stat" data-view="battery" style="cursor:pointer"><h2>Battery</h2><div class="v">${STATE.charging ? b.pct : 95}<small>%</small></div><div class="k">${STATE.charging ? pill("ok", "Charging · " + b.battIn + " W") : "On battery"} · 100% health</div></section>
+      <section class="card stat" data-view="storage" style="cursor:pointer"><h2>Storage</h2><div class="v">344<small>GB free</small></div><div class="k">of 995 GB · SMART verified</div></section>
+      <section class="card stat" data-view="memory" style="cursor:pointer"><h2>Memory</h2><div class="v">${D.mem.avail}<small>% free</small></div><div class="k">${pill("warn", "Swap 68%")}</div></section>
+      <section class="card stat" data-view="performance" style="cursor:pointer"><h2>CPU</h2><div class="v" id="ovCpu">23<small>%</small></div><div class="k">Load 6.01 · 10 cores</div></section>
+      <section class="card stat" data-view="performance" style="cursor:pointer"><h2>GPU</h2><div class="v" id="ovGpu">${D.gpu.device}<small>%</small></div><div class="k">10 cores · ${D.gpu.inUse} GB in use</div></section>
+    </div>
+
+    <section style="margin-top:26px">
+      <div class="row spread" style="margin-bottom:12px"><h2 style="font:700 20px/1.2 var(--f-display);margin:0">Findings</h2><span class="muted">${o.length} open</span></div>
+      ${groups.map(([sev, name]) => {
+        const items = o.filter(i => i.sev === sev);
+        if (!items.length) return "";
+        return `<div class="fgroup"><div class="fgroup-h"><i class="dot ${sev}"></i>${name} <span class="count">${items.length}</span></div>
+          ${items.map(i => `<article class="finding">
+            <div class="ic ${i.sev}">${ICON[i.sev]}</div>
+            <div style="min-width:0">
+              <h3>${i.t}</h3><p>${i.d}</p>
+              <div class="meta"><span>${VIEWS.find(v => v[0] === i.area)[1]}</span></div>
+              ${STATE.explained.has(i.id) ? `<div class="explain"><div class="who">${ICON.spark} Explained on this Mac</div><p>${i.ai}</p></div>` : ""}
+            </div>
+            <div class="acts"><button class="btn small ${i.sev === "warn" || i.sev === "crit" ? "primary" : ""}" data-fix="${i.id}">${i.fix}</button>
+              ${STATE.explained.has(i.id) ? "" : `<button class="btn small ai" data-explain="${i.id}">${ICON.spark} Explain</button>`}</div>
+          </article>`).join("")}</div>`;
+      }).join("")}
+    </section>`;
+  },
+
+  assistant() {
+    const suggestions = ["Why is my Mac slow?", "Is my battery healthy?", "What can I safely delete?", "Which apps should I quit?"];
+    return header("Assistant", "Ask about this Mac in plain English. Answers use the readings from your latest scan.", AIPILL) + `
+    <div class="grid g3">
+      <section class="span2" style="min-width:0">
+        <div class="chat" id="chat">
+          ${STATE.chat.length ? STATE.chat.map(m => m.me
+            ? `<div class="msg me">${m.text}</div>`
+            : `<div class="msg bot"><div class="who">${ICON.spark} DiagnoMac</div><div class="${m.typing ? "caret" : ""}" data-answer>${m.text}</div>${m.used && !m.typing ? `<div class="used">Checked: ${m.used.map(u => `<span>${u}</span>`).join("")}</div>` : ""}</div>`).join("")
+          : `<div class="card"><p style="margin:0 0 12px">Try one of these, or type your own question.</p><div class="chips">${suggestions.map(q => `<button class="chip" data-ask="${q}">${q}</button>`).join("")}</div></div>`}
         </div>
+        <form class="ask" id="askForm"><label for="askInput" class="muted" hidden>Question</label>
+          <input id="askInput" placeholder="Ask about battery, memory, apps, storage…" autocomplete="off">
+          <button class="btn primary" type="submit">Ask</button></form>
+        ${STATE.chat.length ? `<div class="chips" style="margin-top:10px">${suggestions.map(q => `<button class="chip" data-ask="${q}">${q}</button>`).join("")}</div>` : ""}
       </section>
-      <section class="card stat"><h2>Battery</h2><div class="v">${D.battery.maxCap}<small>% capacity</small></div><div class="k">${D.battery.cycles} cycles · ${D.battery.condition}</div></section>
-      <section class="card stat"><h2>Storage</h2><div class="v">${D.disk.free}<small>GB free</small></div><div class="k">of ${D.disk.cap} GB · SMART ${D.disk.smart}</div></section>
-      <section class="card stat"><h2>Memory</h2><div class="v">${D.mem.freePct}<small>% free</small></div><div class="k">Swap ${D.mem.swapUsed} of ${D.mem.swapTotal} GB</div></section>
+      <aside class="card">
+        <h2>How it works</h2>
+        <p style="margin:0 0 10px">Uses Apple's on-device Foundation Models framework. The model can call DiagnoMac's checks as tools, so answers come from your real readings rather than guesses.</p>
+        <dl class="kv"><dt>Runs on</dt><dd>This Mac</dd><dt>Needs internet</dt><dd>No</dd><dt>Data sent anywhere</dt><dd>None</dd><dt>Model status</dt><dd style="color:var(--ok)">Available</dd></dl>
+        <div class="note">Needs Apple Intelligence turned on. When it's off, the page shows how to turn it on and the rest of the app works as before.</div>
+      </aside>
     </div>`;
+  },
+
+  apps() {
+    const f = STATE.appFilter;
+    const list = D.apps.filter(a => !STATE.quit.has(a.n)).filter(a => f === "all" || (f === "idle" ? a.cpu < 0.5 && !a.self && a.kind === "Window" : f === "bg" ? a.kind !== "Window" : a.kind === "Window"));
+    const total = D.apps.filter(a => !STATE.quit.has(a.n)).reduce((s, a) => s + a.gb, 0);
+    const idle = D.apps.filter(a => !STATE.quit.has(a.n) && a.cpu < 0.5 && !a.self && a.kind === "Window");
+    return header("Running apps", "Everything open on this Mac, including apps that only live in the menu bar or background. Quit what you don't need.",
+      `<div class="seg" role="group" aria-label="Filter">${[["all", "All"], ["win", "With windows"], ["bg", "Menu bar & background"], ["idle", "Idle"]].map(([k, n]) => `<button data-filter="${k}" aria-pressed="${f === k}">${n}</button>`).join("")}</div>`) + `
+    <div class="tiles">
+      <section class="card stat"><h2>Apps open</h2><div class="v">${D.apps.length - STATE.quit.size}</div><div class="k">${D.apps.filter(a => a.kind !== "Window" && !STATE.quit.has(a.n)).length} in menu bar or background</div></section>
+      <section class="card stat"><h2>Memory used</h2><div class="v">${total.toFixed(1)}<small>GB</small></div><div class="k">By apps, excluding macOS</div></section>
+      <section class="card stat"><h2>Idle apps</h2><div class="v">${idle.length}</div><div class="k">${idle.reduce((s, a) => s + a.gb, 0).toFixed(1)} GB you could free</div></section>
+    </div>
+    <section class="card" style="margin-top:14px">
+      <h2>${list.length} apps <span class="aside">Sorted by memory · refreshes every 5 s</span></h2>
+      <div class="tw"><table>
+        <tr><th>App</th><th>Shows as</th><th class="num">Memory</th><th class="num">CPU</th><th class="num">Processes</th><th></th></tr>
+        ${list.map(a => STATE.pendingQuit === a.n ? `<tr class="confirm"><td colspan="6"><div class="row spread"><span><b>Quit ${a.n}?</b> Unsaved work in it may be lost.</span>
+            <span class="row"><button class="btn small" data-cancel-quit>Cancel</button><button class="btn small danger" data-confirm-quit="${a.n}">Quit</button></span></div></td></tr>`
+          : `<tr><td><b style="font-weight:600">${a.n}</b>${a.note ? `<div class="muted" style="font-size:12.5px">${a.note}</div>` : ""}</td>
+            <td class="muted">${a.kind}</td><td class="num">${a.gb >= 1 ? a.gb.toFixed(2) + " GB" : Math.round(a.gb * 1024) + " MB"}</td>
+            <td class="num">${a.cpu.toFixed(1)}%</td><td class="num">${a.procs}</td>
+            <td style="text-align:right;white-space:nowrap">${a.cpu < 0.5 && !a.self && a.kind === "Window" ? pill("info", "Idle") + " " : ""}${a.cpu > 30 ? pill("warn", "Busy") + " " : ""}
+              ${a.self ? "" : `<button class="btn small" data-quit="${a.n}">Quit</button>`}</td></tr>`).join("")}
+      </table></div>
+      <div class="row spread" style="margin-top:14px">
+        <span class="note" style="margin:0">Quit asks the app to close normally, so it can save your work. If an app doesn't respond, the app offers Force Quit.</span>
+        <button class="btn" ${idle.length ? "" : "disabled"} id="quitIdle">Quit ${idle.length} idle apps</button>
+      </div>
+    </section>`;
   },
 
   battery() {
-    const b = D.battery, wear = ((b.full / b.design) * 100).toFixed(1);
-    const hrs = Math.floor(b.tte / 60), mins = b.tte % 60;
-    // sample capacity history
-    const hist = [100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100];
-    return header("Battery", "Wear, charge and power source. Battery capacity normally drops about 1–2% per 50 cycles.") + `
-    <div class="grid g4">
+    const b = D.battery, ch = STATE.charging, pct = ch ? b.pct : 95;
+    return header("Battery", "Charge, power flow and wear. Plug in the charger to see where the power goes.",
+      `<div class="seg" role="group" aria-label="Preview state"><button data-charge="0" aria-pressed="${!ch}">On battery</button><button data-charge="1" aria-pressed="${ch}">Charging</button></div><span class="pill sample">Prototype preview toggle</span>`) + `
+    <section class="card">
+      <div class="batt-hero">
+        <div class="cell ${ch ? "charging" : ""}" role="img" aria-label="Battery ${pct}%${ch ? ", charging" : ""}"><div class="fill" style="width:${pct}%"></div>${ch ? `<div class="bolt">${ICON.bolt}</div>` : ""}</div>
+        <div>
+          <h3>${pct}% ${ch ? `<span class="pill ok live" style="vertical-align:middle;font-size:13px">Charging</span>` : ""}</h3>
+          <p>${ch ? `Full in about <b style="color:var(--ink)">${b.ttf} min</b> · ${b.adapter.trim()} (negotiated ${b.adapterW} W at ${b.adapterV} V)` : `About <b style="color:var(--ink)">4 h 55 min</b> left at current usage · using 14.2 W`}</p>
+          ${ch ? `<p style="margin-top:4px">Charging slows down above 80% to protect the battery. That's normal.</p>` : ""}
+        </div>
+      </div>
+    </section>
+
+    ${ch ? `<div class="grid g2" style="margin-top:14px">
+      <section class="card flow">
+        <h2>Power flow <span class="aside">Live from the battery controller</span></h2>
+        <svg viewBox="0 0 420 200" role="img" aria-label="Charger supplies ${b.systemIn} watts: ${b.systemLoad} to the Mac, ${b.battIn} into the battery, ${b.loss} lost as heat">
+          <path class="wire" d="M120 100 H170" stroke="var(--line)" stroke-width="${b.systemIn / 3}"/>
+          <path class="wire anim" d="M120 100 H170" stroke="var(--accent)" stroke-width="4"/>
+          <path class="wire" d="M200 100 C 240 100, 250 45, 290 45" stroke="var(--line)" stroke-width="${b.systemLoad / 3}"/>
+          <path class="wire anim" d="M200 100 C 240 100, 250 45, 290 45" stroke="var(--accent)" stroke-width="3"/>
+          <path class="wire" d="M200 100 C 240 100, 250 155, 290 155" stroke="var(--line)" stroke-width="${b.battIn / 3}"/>
+          <path class="wire anim" d="M200 100 C 240 100, 250 155, 290 155" stroke="var(--ok)" stroke-width="3"/>
+          <rect x="6" y="66" width="114" height="68" rx="10" fill="var(--sunk)" stroke="var(--line)"/>
+          <text x="63" y="92" text-anchor="middle" fill="var(--muted)" font-size="11" font-family="Schibsted Grotesk, sans-serif">Charger</text>
+          <text x="63" y="118" text-anchor="middle" fill="var(--ink)" font-size="20" font-family="JetBrains Mono, monospace" id="pfIn">${b.systemIn} W</text>
+          <circle cx="185" cy="100" r="15" fill="var(--panel)" stroke="var(--line)"/>
+          <text x="185" y="104" text-anchor="middle" fill="var(--muted)" font-size="11" font-family="Schibsted Grotesk, sans-serif">Mac</text>
+          <rect x="290" y="14" width="124" height="62" rx="10" fill="var(--sunk)" stroke="var(--line)"/>
+          <text x="352" y="37" text-anchor="middle" fill="var(--muted)" font-size="11" font-family="Schibsted Grotesk, sans-serif">Running the Mac</text>
+          <text x="352" y="62" text-anchor="middle" fill="var(--ink)" font-size="18" font-family="JetBrains Mono, monospace" id="pfSys">${b.systemLoad} W</text>
+          <rect x="290" y="124" width="124" height="62" rx="10" fill="var(--ok-soft)" stroke="color-mix(in srgb, var(--ok) 40%, var(--line))"/>
+          <text x="352" y="147" text-anchor="middle" fill="var(--ok)" font-size="11" font-family="Schibsted Grotesk, sans-serif">Into the battery</text>
+          <text x="352" y="172" text-anchor="middle" fill="var(--ink)" font-size="18" font-family="JetBrains Mono, monospace" id="pfBat">+${b.battIn} W</text>
+        </svg>
+        <div class="note">${b.loss} W is lost as heat in conversion. The adapter is rated for 70 W, so it has headroom.</div>
+      </section>
+      <section class="card">
+        <h2>Charging power, last 10 min ${SIM}</h2>
+        <div id="chgSpark"></div>
+        <div class="row spread note" style="margin-top:2px"><span>10 min ago</span><span class="mono">0–60 W</span><span>now</span></div>
+        <dl class="kv" style="margin-top:12px"><dt>Voltage</dt><dd>${b.voltage} V</dd><dt>Current into battery</dt><dd>${b.amps} A</dd><dt>Charger</dt><dd>Apple · USB-C PD</dd></dl>
+      </section>
+    </div>` : ""}
+
+    <div class="tiles" style="margin-top:14px">
       <section class="card stat"><h2>Maximum capacity</h2><div class="v">${b.maxCap}<small>%</small></div><div class="k">${pill("ok", b.condition)}</div></section>
       <section class="card stat"><h2>Cycle count</h2><div class="v">${b.cycles}<small>/ 1000</small></div><div class="k">Rated for 1000 cycles</div></section>
-      <section class="card stat"><h2>Charge</h2><div class="v">${b.pct}<small>%</small></div><div class="k">On battery · charger ${b.charger.toLowerCase()}</div></section>
-      <section class="card stat"><h2>Time remaining</h2><div class="v">${hrs}<small>h</small> ${mins}<small>min</small></div><div class="k">At current usage</div></section>
-      <section class="card span2">
-        <h2>Capacity</h2>
-        <dl class="kv">
-          <dt>Design capacity</dt><dd>${b.design.toLocaleString()} mAh</dd>
-          <dt>Full charge capacity</dt><dd>${b.full.toLocaleString()} mAh</dd>
-          <dt>Nominal capacity</dt><dd>${b.nominal.toLocaleString()} mAh</dd>
-          <dt>Currently stored</dt><dd>${b.remaining.toLocaleString()} mAh</dd>
-          <dt>Full charge vs design</dt><dd>${wear}%</dd>
-        </dl>
-        <div class="meter" style="margin-top:14px"><i style="width:100%;background:var(--ok)"></i></div>
-        <div class="note">New batteries often report slightly above design capacity. That is expected.</div>
-      </section>
-      <section class="card span2">
-        <h2>Capacity over 12 months ${SAMPLE}</h2>
-        <svg class="spark" viewBox="0 0 300 70" preserveAspectRatio="none" aria-label="Capacity history">
-          <line x1="0" y1="10" x2="300" y2="10" stroke="var(--line)" stroke-dasharray="3 4"/>
-          <line x1="0" y1="60" x2="300" y2="60" stroke="var(--line)" stroke-dasharray="3 4"/>
-          <polyline fill="none" stroke="var(--ok)" stroke-width="2" points="${hist.map((v, i) => `${i * 300 / 11},${10 + (100 - v) * 2.5}`).join(" ")}"/>
-          <circle cx="300" cy="10" r="3.5" fill="var(--ok)"/>
-        </svg>
-        <div class="row spread note" style="margin-top:4px"><span>Oct 2025</span><span class="mono">100% → 80% scale</span><span>Today</span></div>
-        <div class="note">The native app will log capacity daily so you can see wear over time.</div>
-      </section>
-      <section class="card span-all">
-        <h2>Power settings</h2>
-        <div class="tw"><table>
-          <tr><th>Setting</th><th class="num">On battery</th><th class="num">On power adapter</th></tr>
-          <tr><td>Display sleep</td><td class="num">60 min</td><td class="num">180 min</td></tr>
-          <tr><td>System sleep</td><td class="num">1 min</td><td class="num">1 min</td></tr>
-          <tr><td>Low Power Mode</td><td class="num">Off</td><td class="num">Off</td></tr>
-          <tr><td>Wake on network</td><td class="num">Off</td><td class="num">On</td></tr>
-        </table></div>
-        <div class="note">A 180-minute display sleep on power keeps the screen on long after you walk away. 10–15 minutes saves energy and screen wear.</div>
-      </section>
-    </div>`;
+      <section class="card stat"><h2>Design capacity</h2><div class="v">${b.design.toLocaleString()}<small>mAh</small></div><div class="k">Full charge ${b.full.toLocaleString()} mAh</div></section>
+    </div>
+    <section class="card" style="margin-top:14px"><h2>Charge log ${SAMPLE}</h2>
+      <div class="tw"><table><tr><th>When</th><th>Event</th><th class="num">Charge</th><th class="num">Peak power</th></tr>
+        <tr><td>Today 17:31</td><td>Charger connected · 70W USB-C</td><td class="num">71% → 95%</td><td class="num">52 W</td></tr>
+        <tr><td>Today 09:14</td><td>Charger disconnected</td><td class="num">100%</td><td class="num">—</td></tr>
+        <tr><td>Yesterday 22:40</td><td>Charger connected · 70W USB-C</td><td class="num">18% → 100%</td><td class="num">61 W</td></tr>
+      </table></div>
+      <div class="note">The app will log every plug-in and unplug with the charger used and the peak power, so a weak cable or charger shows up.</div>
+    </section>`;
   },
 
   performance() {
-    const cores = Array.from({ length: 10 }, (_, i) => `<div class="core ${i >= 4 ? "e" : ""}"><div class="col"><i style="height:30%"></i></div><small>${i < 4 ? "S" : "E"}${i < 4 ? i + 1 : i - 3}</small></div>`).join("");
-    return header("Performance", "CPU load, thermal state and the processes using the most CPU.") + `
-    <div class="grid g4">
-      <section class="card stat"><h2>Load average</h2><div class="v">${D.load[0]}</div><div class="k mono">1 min · ${D.load[1]} 5 min · ${D.load[2]} 15 min</div></section>
-      <section class="card stat"><h2>CPU in use</h2><div class="v" id="cpuTot">—<small>%</small></div><div class="k">All 10 cores</div></section>
-      <section class="card stat"><h2>Thermal state</h2><div class="v">Nominal</div><div class="k">No throttling recorded</div></section>
-      <section class="card stat"><h2>GPU</h2><div class="v">10<small>cores</small></div><div class="k">Apple M5 · Metal</div></section>
-      <section class="card span2">
-        <h2>Per-core load ${LIVE_SIM}</h2>
-        <div class="cores" id="cores">${cores}</div>
-        <div class="legend"><span style="--c:var(--accent)">Super cores (S)</span><span style="--c:color-mix(in srgb, var(--accent) 55%, var(--panel))">Efficiency cores (E)</span></div>
+    const cores = n => Array.from({ length: n }, (_, i) => `<div class="bar"><div class="col"><i style="height:20%"></i></div><small>${i + 1}</small></div>`).join("");
+    return header("CPU & GPU", "Live load on the processor and graphics, thermal state, and the processes using the most CPU.") + `
+    <div class="tiles">
+      <section class="card stat"><h2>CPU in use</h2><div class="v" id="cpuTot">—<small>%</small></div><div class="k">10 cores · load ${D.load[0]}</div></section>
+      <section class="card stat"><h2>GPU in use</h2><div class="v" id="gpuTot">${D.gpu.device}<small>%</small></div><div class="k">10 cores · Metal 4</div></section>
+      <section class="card stat"><h2>GPU memory</h2><div class="v">${D.gpu.inUse}<small>GB</small></div><div class="k">${D.gpu.alloc} GB allocated</div></section>
+      <section class="card stat"><h2>Thermal state</h2><div class="v">Nominal</div><div class="k">Not throttling</div></section>
+    </div>
+    <div class="grid g2" style="margin-top:14px">
+      <section class="card"><h2>CPU per core ${SIM}</h2><div class="bars" id="cpuBars" style="grid-template-columns:repeat(10,1fr)">${cores(10)}</div></section>
+      <section class="card"><h2>CPU, last 60 s ${SIM}</h2><div id="cpuSparkWrap"></div></section>
+      <section class="card">
+        <h2>GPU ${SIM}</h2>
+        <div id="gpuSparkWrap"></div>
+        <div style="display:grid;gap:10px;margin-top:12px">
+          ${[["Overall", "device"], ["Rendering", "renderer"], ["Geometry (tiler)", "tiler"]].map(([n, k]) => `<div><div class="row spread" style="font-size:13px"><span class="muted">${n}</span><span class="mono" id="g_${k}">${D.gpu[k]}%</span></div><div class="meter" style="margin-top:4px"><i id="gm_${k}" style="width:${D.gpu[k]}%;background:var(--accent)"></i></div></div>`).join("")}
+        </div>
       </section>
-      <section class="card span2">
-        <h2>Total CPU, last 60 s ${LIVE_SIM}</h2>
-        <svg class="spark" id="cpuSpark" viewBox="0 0 300 70" preserveAspectRatio="none" aria-label="CPU history"></svg>
-        <div class="row spread note"><span>60 s ago</span><span>now</span></div>
+      <section class="card">
+        <h2>What's using the GPU</h2>
+        <p style="margin:0 0 10px" class="muted">macOS doesn't report GPU use per app without admin rights. These are the likely sources based on what's open.</p>
+        <div class="tw"><table><tr><th>Likely source</th><th>Why</th></tr>
+          <tr><td>WindowServer</td><td class="muted">Drawing two displays, including the external 1080p at 75 Hz</td></tr>
+          <tr><td>Dynamic Island</td><td class="muted">Animated menu bar overlay</td></tr>
+          <tr><td>Claude, Safari</td><td class="muted">Web content is GPU-accelerated</td></tr></table></div>
+        <div class="note">With your admin password the app can read exact GPU power and frequency from powermetrics.</div>
       </section>
       <section class="card span-all">
-        <h2>Top processes <span style="text-transform:none;letter-spacing:0;font-weight:400">snapshot 16:56</span></h2>
-        <div class="tw"><table>
-          <tr><th>Process</th><th>App</th><th class="num">CPU %</th><th class="num">Memory %</th><th></th></tr>
-          ${D.procs.map(p => `<tr><td class="trunc">${p[0]}</td><td style="color:var(--muted)">${p[3]}</td><td class="num">${p[1].toFixed(1)}</td><td class="num">${p[2].toFixed(1)}</td>
-          <td style="text-align:right">${p[1] > 40 ? pill("warn", "High") : ""}</td></tr>`).join("")}
+        <h2>Top processes by CPU <span class="aside">Snapshot 17:55</span></h2>
+        <div class="tw"><table><tr><th>Process</th><th>App</th><th class="num">CPU</th><th class="num">Memory</th><th></th></tr>
+          ${D.procs.map(p => `<tr><td class="trunc">${p[0]}</td><td class="muted">${p[3]}</td><td class="num">${p[1].toFixed(1)}%</td><td class="num">${p[2]}</td><td style="text-align:right">${p[1] > 30 ? pill("warn", "High") : ""}</td></tr>`).join("")}
         </table></div>
-        <div class="note">WindowServer draws everything on screen. High usage usually comes from an external display at a scaled resolution, many open windows, or menu bar apps that animate (such as Dynamic Island, at 17.9%).</div>
       </section>
     </div>`;
   },
 
   memory() {
-    const m = D.mem, segs = [["Wired", m.wired, "var(--crit)"], ["App memory", m.active, "var(--accent)"], ["Cached files", m.inactive, "color-mix(in srgb, var(--accent) 45%, var(--panel))"], ["Compressed + other", m.compressedOther, "var(--warn)"], ["Free", m.free, "var(--ok)"]];
-    return header("Memory", "How the 24 GB of RAM is being used, and whether macOS has to fall back to swap.") + `
-    <div class="grid g4">
-      <section class="card stat"><h2>Memory pressure</h2><div class="v">${100 - m.freePct}<small>%</small></div><div class="k">${pill("warn", "Elevated")}</div></section>
-      <section class="card stat"><h2>Swap used</h2><div class="v">${m.swapUsed}<small>/ ${m.swapTotal} GB</small></div><div class="k">Encrypted swap</div></section>
-      <section class="card stat"><h2>Page-outs</h2><div class="v">${m.pageouts.toLocaleString()}</div><div class="k">Since boot (9 h ago)</div></section>
-      <section class="card stat"><h2>Installed</h2><div class="v">${m.total}<small>GB</small></div><div class="k">Unified memory</div></section>
-      <section class="card span-all">
-        <h2>Breakdown</h2>
-        <div class="meter" style="height:18px">${segs.map(s => `<i style="width:${s[1] / m.total * 100}%;background:${s[2]}" title="${s[0]} ${s[1]} GB"></i>`).join("")}</div>
-        <div class="legend">${segs.map(s => `<span style="--c:${s[2]}">${s[0]} <b class="mono" style="color:var(--ink);font-weight:500">${s[1].toFixed(2)} GB</b></span>`).join("")}</div>
-        <div class="note">Swap at 71% with 25k page-outs after only 9 hours means apps are regularly pushed out of RAM. Closing the Claude renderer tabs and the mlx-lm background service (see Startup items) will free the most.</div>
-      </section>
-      <section class="card span-all">
-        <h2>Largest memory users ${SAMPLE}</h2>
-        <div class="tw"><table>
-          <tr><th>App</th><th class="num">Memory</th><th class="num">Compressed</th></tr>
-          <tr><td>mlx-lm (Homebrew service)</td><td class="num">6.10 GB</td><td class="num">0.40 GB</td></tr>
-          <tr><td>Claude</td><td class="num">2.60 GB</td><td class="num">0.85 GB</td></tr>
-          <tr><td>Google Chrome</td><td class="num">2.20 GB</td><td class="num">1.10 GB</td></tr>
-          <tr><td>Xcode</td><td class="num">1.70 GB</td><td class="num">0.30 GB</td></tr>
-          <tr><td>Music</td><td class="num">0.22 GB</td><td class="num">0.05 GB</td></tr>
-        </table></div>
-      </section>
-    </div>`;
+    const m = D.mem, segs = [["Wired", m.wired, "var(--crit)"], ["App memory", m.app, "var(--accent)"], ["Compressed", m.compressed, "var(--warn)"], ["Cached files", m.cached, "color-mix(in srgb, var(--accent) 40%, var(--panel))"], ["Other", m.other, "var(--muted)"], ["Free", m.free, "var(--ok)"]];
+    const tips = [
+      { n: "Microsoft Teams", gb: 1.26, why: "Idle, no CPU in 10 min", act: "quit" },
+      { n: "Slack", gb: 0.48, why: "Idle, no CPU in 10 min", act: "quit" },
+      { n: "Microsoft Outlook", gb: 0.35, why: "Idle. Mail is also open", act: "quit" },
+      { n: "Cliq", gb: 0.33, why: "Idle, no CPU in 10 min", act: "quit" },
+      { n: "Docker", gb: 0.32, why: "No containers running", act: "quit" }
+    ].filter(t => !STATE.quit.has(t.n));
+    const freed = tips.reduce((s, t) => s + t.gb, 0);
+    return header("Memory", "How the 24 GB of RAM is used, and how to take pressure off it.") + `
+    <div class="tiles">
+      <section class="card stat"><h2>Memory pressure</h2><div class="v">Elevated</div><div class="k">${pill("warn", m.avail + "% available")}</div></section>
+      <section class="card stat"><h2>Swap used</h2><div class="v">${m.swapUsed}<small>/ ${m.swapTotal} GB</small></div><div class="k">${pill("warn", "68% full")}</div></section>
+      <section class="card stat"><h2>Page-outs</h2><div class="v">${m.pageouts.toLocaleString()}</div><div class="k">Since startup 10 h ago</div></section>
+    </div>
+    <section class="card" style="margin-top:14px">
+      <h2>Relieve memory pressure <span class="aside">Could free about ${freed.toFixed(1)} GB</span></h2>
+      <div class="tw"><table>
+        <tr><th>Suggestion</th><th>Why</th><th class="num">Frees</th><th></th></tr>
+        ${tips.map(t => `<tr><td><b style="font-weight:600">Quit ${t.n}</b></td><td class="muted">${t.why}</td><td class="num">${t.gb.toFixed(2)} GB</td><td style="text-align:right"><button class="btn small" data-quit-mem="${t.n}">Quit</button></td></tr>`).join("")}
+        <tr><td><b style="font-weight:600">Restart your Mac</b></td><td class="muted">Clears all 2.72 GB of swap. Up for 10 h with heavy paging.</td><td class="num">2.72 GB swap</td><td style="text-align:right"><button class="btn small" id="restartBtn">Restart…</button></td></tr>
+        <tr><td><b style="font-weight:600">Close unused browser tabs</b></td><td class="muted">Each tab is its own process. Safari has several open.</td><td class="num">varies</td><td></td></tr>
+      </table></div>
+      <div class="row spread" style="margin-top:14px"><span class="note" style="margin:0">Apps are asked to quit normally so they can save your work.</span>
+        <button class="btn primary" id="quitAllMem" ${tips.length ? "" : "disabled"}>Quit ${tips.length} idle apps</button></div>
+      <div class="explain"><div class="who">${ICON.spark} Why this helps</div><p>When RAM runs out, macOS compresses memory and then writes it to the SSD (swap). Reading it back is many times slower than RAM, which is the lag you feel when switching apps. Freeing 2.7 GB brings you back under the swap threshold.</p></div>
+    </section>
+    <section class="card" style="margin-top:14px">
+      <h2>Breakdown</h2>
+      <div class="meter" style="height:18px">${segs.map(s => `<i style="width:${s[1] / m.total * 100}%;background:${s[2]}"></i>`).join("")}</div>
+      <div class="legend">${segs.map(s => `<span style="--c:${s[2]}">${s[0]} <b class="mono" style="color:var(--ink);font-weight:500">${s[1].toFixed(1)} GB</b></span>`).join("")}</div>
+    </section>`;
   },
 
   storage() {
-    const used = (D.disk.cap - D.disk.free), total = D.clean.reduce((a, c) => a + c[1], 0);
-    const cats = [["Apps", 92, "var(--accent)"], ["Developer", 186, "var(--warn)"], ["Documents & media", 214, "color-mix(in srgb, var(--accent) 45%, var(--panel))"], ["System & data", used - 92 - 186 - 214, "var(--muted)"], ["Free", D.disk.free, "var(--ok)"]];
-    return header("Storage", "Drive health, what is taking space, and what you can safely remove.") + `
-    <div class="grid g4">
-      <section class="card stat"><h2>Free space</h2><div class="v">${D.disk.free}<small>GB</small></div><div class="k">${(D.disk.free / D.disk.cap * 100).toFixed(0)}% of ${D.disk.cap} GB</div></section>
-      <section class="card stat"><h2>Drive health</h2><div class="v">${D.disk.smart}</div><div class="k">S.M.A.R.T. status</div></section>
-      <section class="card stat"><h2>File system</h2><div class="v" style="font-size:20px">APFS</div><div class="k">Encrypted · Apple Fabric SSD</div></section>
-      <section class="card stat"><h2>Reclaimable</h2><div class="v">${total.toFixed(1)}<small>GB</small></div><div class="k">From ${D.clean.length} locations</div></section>
-      <section class="card span-all">
-        <h2>What is using space ${SAMPLE}</h2>
-        <div class="meter" style="height:18px">${cats.map(c => `<i style="width:${c[1] / D.disk.cap * 100}%;background:${c[2]}"></i>`).join("")}</div>
-        <div class="legend">${cats.map(c => `<span style="--c:${c[2]}">${c[0]} <b class="mono" style="color:var(--ink);font-weight:500">${c[1].toFixed(0)} GB</b></span>`).join("")}</div>
-      </section>
-      <section class="card span-all">
-        <h2>Cleanup</h2>
-        <div class="tw"><table>
-          <tr><th></th><th>Item</th><th>Location</th><th class="num">Size</th></tr>
-          ${D.clean.map((c, i) => `<tr><td style="width:28px"><input type="checkbox" id="cl${i}" ${i < 2 ? "checked" : ""} aria-label="Select ${c[0]}"></td>
-            <td><label for="cl${i}">${c[0]}</label> ${c[3] ? "" : SAMPLE}</td><td class="mono trunc" style="color:var(--muted);font-size:12px">${c[2]}</td><td class="num">${c[1].toFixed(1)} GB</td></tr>`).join("")}
-        </table></div>
-        <div class="row spread" style="margin-top:14px"><span class="note" id="cleanSum" style="margin:0"></span><button class="btn primary" id="cleanBtn">Move selected to Trash</button></div>
-      </section>
-    </div>`;
+    const sel = D.clean.filter(c => STATE.clean.has(c.id)), all = STATE.clean.size === D.clean.length, some = STATE.clean.size > 0 && !all;
+    return header("Storage", "Drive health, backups, and files you can safely remove.") + `
+    <div class="tiles">
+      <section class="card stat"><h2>Free space</h2><div class="v">344<small>GB</small></div><div class="k">35% of 995 GB</div></section>
+      <section class="card stat"><h2>Drive health</h2><div class="v">Verified</div><div class="k">${pill("ok", "S.M.A.R.T.")}</div></section>
+      <section class="card stat"><h2>Backups</h2><div class="v">None</div><div class="k">${pill("warn", "Time Machine off")}</div></section>
+      <section class="card stat"><h2>Reclaimable</h2><div class="v">8.1<small>GB</small></div><div class="k">Plus simulators</div></section>
+    </div>
+    <section class="card" style="margin-top:14px">
+      <h2>Cleanup</h2>
+      <div class="tw"><table>
+        <tr><th style="width:30px"><input type="checkbox" id="selAll" aria-label="Select all" ${all ? "checked" : ""}></th><th><label for="selAll" style="cursor:pointer">${all ? "Deselect all" : "Select all"}</label></th><th>Location</th><th class="num">Size</th></tr>
+        ${D.clean.map(c => `<tr><td><input type="checkbox" id="cl_${c.id}" data-clean="${c.id}" ${STATE.clean.has(c.id) ? "checked" : ""} aria-label="Select ${c.t}"></td>
+          <td><label for="cl_${c.id}"><b style="font-weight:600">${c.t}</b></label><div class="muted" style="font-size:12.5px">${c.how}</div></td>
+          <td class="mono trunc muted" style="font-size:12px">${c.path}</td><td class="num">${c.gb < 0.1 ? Math.round(c.gb * 1000) + " MB" : c.gb.toFixed(1) + " GB"}</td></tr>`).join("")}
+      </table></div>
+      <div class="row spread" style="margin-top:14px"><span class="muted">${sel.length ? `${sel.length} selected · ${sel.reduce((s, c) => s + c.gb, 0).toFixed(1)} GB` : "Select items to clean"}</span>
+        <button class="btn primary" id="cleanBtn" ${sel.length ? "" : "disabled"}>Clean selected…</button></div>
+    </section>
+    <section class="card" style="margin-top:14px">
+      <h2>Time Machine</h2>
+      <div class="row spread"><span>No backup disk is set up. Connect an external drive of 1 TB or more, then turn on Time Machine.</span><button class="btn primary" data-fix="tm">Open Time Machine settings</button></div>
+    </section>`;
   },
 
   network() {
-    return header("Network", "Connection quality, latency, DNS and throughput.", `<button class="btn primary" id="netTest">Run network test</button>`) + `
-    <div class="grid g4">
-      <section class="card stat"><h2>Interface</h2><div class="v" style="font-size:20px">Wi-Fi (en0)</div><div class="k">Network name hidden by macOS privacy</div></section>
-      <section class="card stat"><h2>Latency</h2><div class="v" id="nLat">31.5<small>ms</small></div><div class="k">To 1.1.1.1 · jitter 0.37 ms</div></section>
-      <section class="card stat"><h2>Download</h2><div class="v" id="nDown">—<small>Mbps</small></div><div class="k">Run test to measure</div></section>
-      <section class="card stat"><h2>Upload</h2><div class="v" id="nUp">—<small>Mbps</small></div><div class="k">Run test to measure</div></section>
-      <section class="card span2">
-        <h2>Wi-Fi signal ${SAMPLE}</h2>
-        <dl class="kv">
-          <dt>Signal (RSSI)</dt><dd>−54 dBm</dd><dt>Noise</dt><dd>−92 dBm</dd><dt>SNR</dt><dd>38 dB</dd>
-          <dt>Channel</dt><dd>149 (5 GHz, 80 MHz)</dd><dt>PHY mode</dt><dd>802.11ax (Wi-Fi 6)</dd><dt>Tx rate</dt><dd>1,201 Mbps</dd>
-        </dl>
-        <div class="note">An SNR above 25 dB is good. Below 15 dB you will see drops and slow speeds.</div>
-      </section>
-      <section class="card span2">
-        <h2>Checks</h2>
-        <div class="issues" id="netChecks">
-          ${[["Gateway reachable", "Router responds"], ["DNS resolution", "Resolves apple.com"], ["Internet reachable", "Ping 1.1.1.1 · 0% loss"], ["IPv6", "Global address assigned"], ["Captive portal", "None detected"]]
-            .map(c => `<div class="issue"><i class="bar"></i><div><b>${c[0]}</b><span>${c[1]}</span></div><div class="acts">${pill("ok", "Pass")}</div></div>`).join("")}
+    const s = STATE.speed, phases = ["Download", "Upload", "Responsiveness"];
+    const live = s.running ? (s.phase === 0 ? s.cur : s.phase === 1 ? s.cur : null) : null;
+    const big = s.running ? (s.phase < 2 ? `${Math.round(s.cur)}<small>Mbps</small>` : `${Math.round(s.cur)}<small>RPM</small>`) : s.down != null ? `${s.down}<small>Mbps down</small>` : `—<small>Mbps</small>`;
+    return header("Network", "Connection quality, latency, DNS and throughput.",
+      `<button class="btn">Recheck</button>${s.running ? `<button class="btn" id="cancelSpeed">Cancel</button>` : `<button class="btn primary" id="speedBtn">Run speed test</button>`}`) + `
+    <section class="card">
+      <h2>Speed test ${s.running ? `<span class="pill info live">Testing · ${Math.ceil(19 - s.t)} s left</span>` : s.down != null ? pill("ok", "Finished") : ""}</h2>
+      <div class="speed">
+        <div>
+          <div class="muted" style="font-size:13px">${s.running ? phases[s.phase] + " in progress" : s.down != null ? "Result" : "Not run yet"}</div>
+          <div class="gauge-num" id="spBig">${big}</div>
+          <div class="steps">${phases.map((p, i) => `<span class="step ${s.running && s.phase === i ? "active" : (s.running && s.phase > i) || (!s.running && s.down != null) ? "done" : ""}">${(s.running && s.phase > i) || (!s.running && s.down != null) ? "✓" : i + 1} ${p}
+            ${i === 0 && s.down != null ? `<b class="mono">${s.down}</b>` : ""}${i === 1 && s.up != null ? `<b class="mono">${s.up}</b>` : ""}${i === 2 && s.rpm != null ? `<b class="mono">${s.rpm}</b>` : ""}</span>`).join("")}</div>
+          <div class="progress"><i id="spProg" style="width:${s.running ? (s.t / 19 * 100) : s.down != null ? 100 : 0}%"></i></div>
         </div>
-      </section>
+        <div>${sparkSVG("spSpark", s.series, 500, s.phase === 1 ? "var(--ok)" : "var(--accent)")}
+          <div class="note" style="margin-top:4px">${s.running ? "Live throughput from Apple's networkQuality tool. Each phase runs until the speed settles." : s.down != null ? "Good for 4K streaming and video calls. Responsiveness is how fast the connection reacts under load." : "Measures download, upload and responsiveness using Apple's servers. Takes about 20 seconds."}</div></div>
+      </div>
+    </section>
+    <div class="tiles" style="margin-top:14px">
+      <section class="card stat"><h2>Interface</h2><div class="v">Wi-Fi</div><div class="k">en0 · connected</div></section>
+      <section class="card stat"><h2>Latency</h2><div class="v">24.5<small>ms</small></div><div class="k">To 1.1.1.1 · jitter 4.70 ms</div></section>
+      <section class="card stat"><h2>Signal</h2><div class="v">41<small>dB SNR</small></div><div class="k">${pill("ok", "Good")} −51 dBm</div></section>
+      <section class="card stat"><h2>Channel</h2><div class="v">44</div><div class="k">5 GHz · 80 MHz · Wi-Fi 6</div></section>
     </div>`;
   },
 
   security() {
-    const items = D.security.map(s => s[0] === "Firewall" && STATE.fixed.has("fw") ? [s[0], "ok", "On", "Incoming connections are filtered."] : s);
     return header("Security", "The protections built into macOS, and whether each one is on.") + `
-    <div class="grid g2">
-      ${items.map(s => `<section class="card"><div class="row spread"><b style="font-size:15px">${s[0]}</b>${pill(s[1], s[2])}</div>
-        <p style="color:var(--muted);margin:8px 0 0">${s[3]}</p>
-        ${s[0] === "Firewall" && s[1] === "crit" ? `<div style="margin-top:12px"><button class="btn primary small" data-fix="fw">Turn on firewall</button></div>` : ""}</section>`).join("")}
-      <section class="card span2">
-        <h2>XProtect & background checks ${SAMPLE}</h2>
-        <dl class="kv"><dt>XProtect definitions</dt><dd>v5312 · updated 28 Sep 2026</dd><dt>XProtect Remediator</dt><dd>Last scan 1 Oct 2026, 03:12</dd><dt>Unsigned kernel extensions</dt><dd>None</dd><dt>Configuration profiles</dt><dd>None installed</dd></dl>
-      </section>
-    </div>`;
+    <div class="grid g2">${D.security.map(s => `<section class="card"><div class="row spread"><b style="font-size:15px">${s[0]}</b>${pill(s[1], s[2])}</div></section>`).join("")}</div>`;
   },
 
   startup() {
-    return header("Startup items", "Background agents that start when you log in. Each one costs memory, battery and boot time.") + `
-    <div class="card"><div class="tw"><table>
-      <tr><th>Item</th><th>Vendor</th><th>Scope</th><th class="num">Runs at login</th></tr>
-      ${D.startup.map((s, i) => `<tr><td><div class="mono" style="font-size:13px">${s[0]}</div><div style="color:var(--muted);font-size:12.5px">${s[4]}</div></td>
-        <td>${s[1]}</td><td style="color:var(--muted)">${s[2]}</td>
-        <td class="num"><label class="switch"><input type="checkbox" id="su${i}" data-su="${i}" ${STATE.startup[i] ? "checked" : ""} aria-label="Run ${s[0]} at login"><i></i></label></td></tr>`).join("")}
-    </table></div>
-    <div class="note">Switching an item off unloads it with launchctl and keeps the file, so you can turn it back on. Prototype: nothing on your Mac changes.</div></div>`;
+    return header("Startup items", "Background agents that start at login. Each one costs memory, battery and boot time.") + `
+    <section class="card"><div class="tw"><table><tr><th>Item</th><th>Vendor</th><th>Scope</th><th></th><th class="num">At login</th></tr>
+      ${D.startup.map((s, i) => `<tr><td class="mono" style="font-size:13px">${s[0]}${STATE.explained.has("su" + i) ? `<div class="explain" style="font-family:var(--f-body)"><div class="who">${ICON.spark} Explained on this Mac</div><p>${suExplain(s[0])}</p></div>` : ""}</td>
+        <td>${s[1]}</td><td class="muted">${s[2]}</td><td>${STATE.explained.has("su" + i) ? "" : `<button class="btn small ai" data-explain="su${i}">${ICON.spark} What is this?</button>`}</td>
+        <td class="num"><label class="switch"><input type="checkbox" ${STATE.startup[i] ? "checked" : ""} ${s[2] === "User agent" ? "" : "disabled"} aria-label="Run ${s[0]} at login"><i></i></label></td></tr>`).join("")}
+    </table></div></section>`;
+  },
+
+  devices() {
+    return header("Devices", "Everything connected to this Mac: Bluetooth accessories, displays and power.") + `
+    <div class="proposal" style="margin-bottom:14px"><b>Proposed new page.</b> Bluetooth names and displays are real. Accessory battery levels are samples until the app reads them.</div>
+    <div class="grid g2">
+      <section class="card"><h2>Bluetooth</h2><div class="tw"><table><tr><th>Device</th><th>Type</th><th class="num">Battery</th></tr>
+        ${D.bt.map(d => `<tr><td>${d[0]}</td><td class="muted">${d[1]}</td><td class="num">${d[2] == null ? "—" : `<span style="color:${d[2] < 20 ? "var(--crit)" : "var(--ink)"}">${d[2]}%</span>`}</td></tr>`).join("")}</table></div>
+        <div class="note">Low-battery alerts for your mouse and headphones before they die mid-call.</div></section>
+      <section class="card"><h2>Displays</h2><dl class="kv"><dt>Built-in XDR</dt><dd>3024×1964 · 120 Hz</dd><dt>S27C31x</dt><dd>1920×1080 · 75 Hz</dd></dl>
+        <h2 style="margin-top:18px">Power</h2><dl class="kv"><dt>Charger</dt><dd>Apple 70W USB-C</dd><dt>Negotiated</dt><dd>68 W · 20 V</dd></dl></section>
+    </div>`;
   },
 
   hardware() {
-    const rows = [
-      [["`",1],["1",1],["2",1],["3",1],["4",1],["5",1],["6",1],["7",1],["8",1],["9",1],["0",1],["-",1],["=",1],["⌫",1.6,"Backspace"]],
-      [["⇥",1.6,"Tab"],["Q",1],["W",1],["E",1],["R",1],["T",1],["Y",1],["U",1],["I",1],["O",1],["P",1],["[",1],["]",1],["\\",1,"Backslash"]],
-      [["⇪",1.9,"CapsLock"],["A",1],["S",1],["D",1],["F",1],["G",1],["H",1],["J",1],["K",1],["L",1],[";",1],["'",1],["↩",1.9,"Enter"]],
-      [["⇧",2.4,"ShiftLeft"],["Z",1],["X",1],["C",1],["V",1],["B",1],["N",1],["M",1],[",",1],[".",1],["/",1],["⇧",2.4,"ShiftRight"]],
-      [["fn",1,"Fn"],["⌃",1,"ControlLeft"],["⌥",1,"AltLeft"],["⌘",1.3,"MetaLeft"],["space",5.6,"Space"],["⌘",1.3,"MetaRight"],["⌥",1,"AltRight"],["←",1,"ArrowLeft"],["↑↓",1,"ArrowUpDown"],["→",1,"ArrowRight"]]
-    ];
-    const codeOf = l => ({ "`": "Backquote", "-": "Minus", "=": "Equal", "[": "BracketLeft", "]": "BracketRight", ";": "Semicolon", "'": "Quote", ",": "Comma", ".": "Period", "/": "Slash" }[l] || (/[0-9]/.test(l) ? "Digit" + l : "Key" + l));
-    return header("Hardware tests", "Interactive tests for parts a sensor cannot check for you.") + `
+    return header("Hardware tests", "Interactive tests for parts sensors can't check for you. Already built in the app.") + `
     <div class="grid g2">
-      <section class="card span2">
-        <h2>Keyboard <span id="kbCount" class="mono" style="text-transform:none;letter-spacing:0;font-weight:400">0 keys tested</span></h2>
-        <div class="kbd" id="kbd">${rows.map(r => `<div class="krow">${r.map(k => `<div class="key" style="--w:${k[1]}" data-code="${k[2] || codeOf(k[0])}">${k[0]}</div>`).join("")}</div>`).join("")}</div>
-        <div class="row spread" style="margin-top:10px"><span class="note" style="margin:0">Press every key. Keys turn green once they register. A key that stays grey may be faulty.</span><button class="btn small" id="kbReset">Reset</button></div>
-      </section>
-      <section class="card">
-        <h2>Display</h2>
-        <p style="margin:0 0 12px;color:var(--muted)">Shows solid colors full screen so dead or stuck pixels stand out. Click to step through red, green, blue, white and black.</p>
-        <button class="btn primary" id="pxBtn">Start display test</button>
-      </section>
-      <section class="card">
-        <h2>Speakers</h2>
-        <p style="margin:0 0 12px;color:var(--muted)">Plays a tone on each side. Listen for crackle, buzz or one side missing.</p>
-        <div class="row"><button class="btn" data-tone="-1">Left</button><button class="btn" data-tone="1">Right</button><button class="btn" data-tone="0">Sweep both</button></div>
-      </section>
-      <section class="card">
-        <h2>Trackpad</h2>
-        <p style="margin:0 0 12px;color:var(--muted)">Draw across the whole pad. Gaps in the line point to dead zones.</p>
-        <canvas id="tp" style="width:100%;height:150px;background:var(--sunk);border-radius:8px;border:1px solid var(--line);display:block;touch-action:none"></canvas>
-      </section>
-      <section class="card">
-        <h2>Camera, microphone, sensors</h2>
-        <p style="margin:0;color:var(--muted)">Camera and microphone checks, ambient light sensor, lid angle, fan and temperature sensors need the native app. They are planned for version 1.</p>
-        <div class="row" style="margin-top:12px">${pill("info", "Native only")}</div>
-      </section>
+      <section class="card"><h2>Keyboard</h2><p class="muted" style="margin:0">Press every key; tested keys turn green.</p></section>
+      <section class="card"><h2>Display</h2><p class="muted" style="margin:0">Full-screen colors for dead pixels, per display.</p></section>
+      <section class="card"><h2>Speakers</h2><p class="muted" style="margin:0">Left, right and frequency sweep.</p></section>
+      <section class="card"><h2>Trackpad</h2><p class="muted" style="margin:0">Draw to find dead zones; counts clicks.</p></section>
+      <section class="card"><h2>Camera</h2><p class="muted" style="margin:0">Live preview, resolution and frame rate.</p></section>
+      <section class="card"><h2>Microphone</h2><p class="muted" style="margin:0">Live level meter with peak hold and silence warning.</p></section>
     </div>`;
   },
 
   logs() {
-    return header("Crash logs", "Apps that crashed or froze, grouped by app. 90 reports on file, no kernel panics.") + `
-    <div class="grid g3">
-      <section class="card stat"><h2>Kernel panics</h2><div class="v">0</div><div class="k">${pill("ok", "None")}</div></section>
-      <section class="card stat"><h2>Crash reports</h2><div class="v">90</div><div class="k">In ~/Library/Logs/DiagnosticReports</div></section>
-      <section class="card stat"><h2>Unexpected shutdowns</h2><div class="v">0</div><div class="k">Last 30 days</div></section>
-      <section class="card span-all">
-        <h2>Most frequent ${SAMPLE}</h2>
-        <div class="tw"><table>
-          <tr><th>App</th><th class="num">Crashes (7 days)</th><th>Last seen</th><th>Reason</th></tr>
-          ${D.crashes.map(c => `<tr><td>${c[0]}</td><td class="num">${c[1]}</td><td style="color:var(--muted)">${c[2]}</td><td class="mono" style="font-size:12.5px">${c[3]}</td></tr>`).join("")}
-        </table></div>
-        <div class="note">The native app will parse each .ips report and explain the likely cause in plain language.</div>
-      </section>
-    </div>`;
+    return header("Crash logs", "Apps that crashed or froze, grouped by app. No kernel panics.") + `
+    <section class="card"><div class="tw"><table><tr><th>App</th><th class="num">Reports (7 days)</th><th>Kind</th><th></th></tr>
+      ${D.crashes.map((c, i) => `<tr><td>${c[0]}${c[3] ? ` <span class="pill sample">macOS</span>` : ""}${STATE.explained.has("cr" + i) ? `<div class="explain"><div class="who">${ICON.spark} Read the latest report on this Mac</div><p>${crExplain(c[0])}</p></div>` : ""}</td>
+        <td class="num">${c[1]}</td><td class="muted">${c[2]}</td><td style="text-align:right">${STATE.explained.has("cr" + i) ? "" : `<button class="btn small ai" data-explain="cr${i}">${ICON.spark} Explain crash</button>`}</td></tr>`).join("")}
+    </table></div><div class="note">The model reads the crash report's exception type and top stack frames, and explains them in plain language.</div></section>`;
   },
 
   report() {
-    return header("Report", "A plain-text summary to send to IT, Apple Support, or a repair shop. Serial numbers are left out unless you add them.",
-      `<button class="btn primary" id="copyRep">Copy report</button>`) + `
-    <div class="card"><textarea class="rep" id="rep" readonly aria-label="Report text">${reportText()}</textarea></div>`;
+    return header("Report", "A plain-text summary for IT, Apple Support or a repair shop. Serial numbers are never included.", `<button class="btn primary" id="copyRep">Copy report</button>`) + `
+    <section class="card"><textarea class="rep" id="rep" readonly aria-label="Report">DiagnoMac report · 1 Oct 2026 17:55
+Health score: ${score()}/100
+
+MACHINE   ${D.machine.model}, ${D.machine.chip}, ${D.machine.cores}
+          ${D.machine.mem} RAM, ${D.machine.disk}, ${D.machine.os}
+BATTERY   100% capacity, 16 cycles, ${STATE.charging ? "charging at 34.2 W from 70W USB-C" : "on battery"}
+GPU       ${D.gpu.device}% busy, ${D.gpu.inUse} GB in use
+MEMORY    57% available, swap 2.72/4.00 GB
+STORAGE   344 GB free of 995 GB, SMART Verified, no Time Machine backup
+
+FINDINGS
+${open().map(i => `  [${i.sev.toUpperCase()}] ${i.t}. ${i.d}`).join("\n")}</textarea></section>`;
   }
 };
 
-function reportText() {
-  const m = D.machine, b = D.battery, open = ISSUES.filter(i => !STATE.fixed.has(i.id));
-  return `DiagnoMac report · 1 Oct 2026 16:56
-Health score: ${score()}/100
-
-MACHINE
-  ${m.model}, ${m.chip}, ${m.cores} cores
-  ${m.mem} RAM, ${m.disk}
-  ${m.os}, uptime ${m.uptime}
-  Displays: ${m.displays}
-
-BATTERY
-  ${b.maxCap}% max capacity, ${b.cycles} cycles, condition ${b.condition}
-  Full charge ${b.full} mAh / design ${b.design} mAh
-
-STORAGE
-  ${D.disk.free} GB free of ${D.disk.cap} GB, SMART ${D.disk.smart}
-
-MEMORY
-  ${D.mem.freePct}% free, swap ${D.mem.swapUsed}/${D.mem.swapTotal} GB, ${D.mem.pageouts} page-outs
-
-CPU
-  Load average ${D.load.join(" / ")}
-
-FINDINGS
-${open.map(i => `  [${i.sev.toUpperCase()}] ${i.t}: ${i.d}`).join("\n")}`;
+function suExplain(l) {
+  return ({ "com.epicgames.launcher": "Opens the Epic Games Launcher every time you log in. Safe to turn off; the launcher still works when you open it yourself.",
+    "com.google.GoogleUpdater.wake": "Wakes Google's updater on a schedule to keep Chrome and other Google apps up to date. Turning it off means updating manually.",
+    "com.google.keystone.agent": "Google's older updater. It's usually left over from an earlier install, and GoogleUpdater replaces it.",
+    "com.google.keystone.xpcservice": "A helper for the older Google updater. Safe to turn off along with the agent.",
+    "sh.brew.mlx-lm": "Starts a local language-model server from Homebrew at login. It can use several GB of memory. Turn it off unless you use it every day.",
+    "com.microsoft.update.agent": "Microsoft AutoUpdate for Office and Teams. It's system-wide, so turning it off needs an administrator." })[l];
+}
+function crExplain(n) {
+  return ({ intelligencetasksd: "It's crashing with EXC_BAD_ACCESS inside an Apple Intelligence framework: it read memory it shouldn't. This is a bug in macOS and nothing on your side is wrong. Updating macOS is the fix.",
+    AppIntentsLiveEntityService: "A macOS service for Shortcuts and widgets that crashed during startup. It restarts on its own. This is harmless unless widgets stop updating.",
+    "Dynamic Island": "Crashing in its own code while drawing an animation. Check for an update from the developer. This app is also behind the high WindowServer load.",
+    Music: "Music stopped responding for 8 seconds while syncing the library. It happens with very large libraries and isn't a hardware problem." })[n];
 }
 
-/* post-render hooks */
-let audioCtx;
+/* ---------- Assistant (simulated streaming) ---------- */
+const ANSWERS = {
+  "Why is my Mac slow?": { a: "Mostly memory. Swap is 68% full and macOS has written 25,917 pages to disk since you started up, so switching apps has to wait for the SSD. Teams, Slack, Outlook and Cliq are idle and hold 2.4 GB between them. The CPU is also busy: WindowServer is at 47%, driven by the external display and the Dynamic Island app. Quit the idle apps and Dynamic Island, then restart when you can.", used: ["memory", "topProcesses", "runningApps"] },
+  "Is my battery healthy?": { a: "Yes. It's at 100% of its original capacity after 16 of its 1,000 rated cycles, and macOS reports its condition as Normal. It's charging at 34.2 W from your 70W adapter and will be full in about 20 minutes.", used: ["battery", "charger"] },
+  "What can I safely delete?": { a: "About 8 GB of user caches are safe to clear; apps rebuild them. If you no longer use older iOS simulators, removing unavailable ones may free part of the 23.5 GB simulator folder. Don't delete Xcode archives if you ship apps, because you need them to read crash reports.", used: ["storage.cleanup"] },
+  "Which apps should I quit?": { a: "Microsoft Teams (1.26 GB), Slack (0.48 GB), Outlook (0.35 GB) and Cliq (0.33 GB). They've used no CPU recently. Docker is also open with no containers running. Quitting all five frees about 2.7 GB, which is enough to stop swapping.", used: ["runningApps", "memory"] }
+};
+function ask(q) {
+  q = q.trim(); if (!q) return;
+  const hit = ANSWERS[q] || { a: "In the app, this question goes to Apple's on-device model, which looks up the relevant readings from your scan before answering. This prototype only has answers for the suggested questions.", used: [] };
+  STATE.chat.push({ me: true, text: q.replace(/</g, "&lt;") });
+  const m = { text: "", typing: true, used: hit.used };
+  STATE.chat.push(m); rerender();
+  const words = hit.a.split(" "); let i = 0;
+  const t = setInterval(() => {
+    i += 2; m.text = words.slice(0, i).join(" ");
+    const el = [...document.querySelectorAll("[data-answer]")].pop();
+    if (el && STATE.view === "assistant") el.textContent = m.text;
+    if (i >= words.length) { clearInterval(t); m.typing = false; if (STATE.view === "assistant") rerender(); }
+  }, 70);
+}
+
+/* ---------- Speed test simulation (runs across page changes) ---------- */
+let speedTimer = null;
+function startSpeed() {
+  const s = STATE.speed; Object.assign(s, { running: true, phase: 0, t: 0, cur: 0, down: null, up: null, rpm: null, series: [] });
+  rerender();
+  speedTimer = setInterval(() => {
+    s.t += 0.25;
+    const target = s.phase === 0 ? 412 : s.phase === 1 ? 58 : 1450;
+    const local = s.phase === 0 ? s.t : s.phase === 1 ? s.t - 10 : s.t - 16;
+    s.cur = target * (1 - Math.exp(-local / 1.6)) * (0.92 + Math.random() * 0.12);
+    if (s.phase < 2) { s.series.push(s.cur); if (s.series.length > 80) s.series.shift(); }
+    if (s.phase === 0 && s.t >= 10) { s.down = 412; s.phase = 1; s.series = []; rerenderNet(); }
+    else if (s.phase === 1 && s.t >= 16) { s.up = 58; s.phase = 2; rerenderNet(); }
+    else if (s.phase === 2 && s.t >= 19) { s.rpm = 1450; s.running = false; clearInterval(speedTimer); toast("Speed test finished (simulated values)"); rerenderNet(); return; }
+    if (STATE.view === "network") {
+      $("#spBig").innerHTML = s.phase < 2 ? `${Math.round(s.cur)}<small>Mbps</small>` : `${Math.round(s.cur)}<small>RPM</small>`;
+      $("#spProg").style.width = (s.t / 19 * 100) + "%";
+      if (s.phase < 2) $("#spSpark").outerHTML = sparkSVG("spSpark", s.series, 500, s.phase === 1 ? "var(--ok)" : "var(--accent)");
+      const lp = document.querySelector(".pill.live"); if (lp) lp.textContent = `Testing · ${Math.ceil(19 - s.t)} s left`;
+    }
+  }, 250);
+}
+function rerenderNet() { if (STATE.view === "network") rerender(); }
+
+/* ---------- Post-render hooks ---------- */
 const after = {
   overview() {
-    $("#scan").onclick = () => {
-      const btn = $("#scan"), bar = $("#scanbar"), msg = $("#scanmsg"), steps = ["battery", "CPU and thermals", "memory", "storage", "network", "security", "startup items", "crash logs"];
-      btn.disabled = true; bar.hidden = false; msg.hidden = false; let i = 0;
-      const t = setInterval(() => {
-        if (i >= steps.length) { clearInterval(t); msg.textContent = "Scan complete. 8 areas checked."; btn.disabled = false; return; }
-        msg.textContent = "Checking " + steps[i] + "…"; bar.firstElementChild.style.width = ((i + 1) / steps.length * 100) + "%"; i++;
-      }, 380);
-      timers.push(t);
-    };
+    timers.push(setInterval(() => {
+      const c = $("#ovCpu"), g = $("#ovGpu");
+      if (c) c.innerHTML = Math.round(20 + Math.random() * 10) + "<small>%</small>";
+      if (g) g.innerHTML = Math.round(10 + Math.random() * 7) + "<small>%</small>";
+    }, 1500));
+  },
+  assistant() {
+    $("#askForm").onsubmit = e => { e.preventDefault(); const v = $("#askInput").value; $("#askInput").value = ""; ask(v); };
+  },
+  apps() {
+    const b = $("#quitIdle");
+    if (b) b.onclick = () => { D.apps.filter(a => a.cpu < 0.5 && !a.self && a.kind === "Window").forEach(a => STATE.quit.add(a.n)); toast("Would quit the idle apps (prototype)"); renderNav(); rerender(); };
+  },
+  battery() {
+    if (!STATE.charging) return;
+    const hist = Array.from({ length: 40 }, (_, i) => 52 - i * 0.35 + Math.random() * 3);
+    const draw = () => { const w = $("#chgSpark"); if (w) w.innerHTML = sparkSVG("chg", hist, 60, "var(--ok)"); };
+    draw();
+    timers.push(setInterval(() => {
+      hist.push(Math.max(20, hist[hist.length - 1] - 0.15 + (Math.random() - .5) * 2)); hist.shift(); draw();
+      const bat = hist[hist.length - 1] * 0.69, sys = 15 + Math.random() * 1.5;
+      const pb = $("#pfBat"), ps = $("#pfSys"), pi = $("#pfIn");
+      if (pb) pb.textContent = "+" + bat.toFixed(1) + " W"; if (ps) ps.textContent = sys.toFixed(1) + " W"; if (pi) pi.textContent = (bat + sys + 1.4).toFixed(1) + " W";
+    }, 1500));
   },
   performance() {
-    const hist = Array.from({ length: 60 }, () => 28 + Math.random() * 18);
+    const cpuH = Array.from({ length: 60 }, () => 20 + Math.random() * 12), gpuH = Array.from({ length: 60 }, () => 10 + Math.random() * 8);
     const tick = () => {
       let sum = 0;
-      document.querySelectorAll("#cores .core i").forEach((el, i) => {
-        const base = i < 4 ? 45 : 25, v = Math.max(3, Math.min(98, base + (Math.random() - .5) * 50)); sum += v; el.style.height = v + "%";
-      });
-      const tot = sum / 10; hist.push(tot); hist.shift();
-      $("#cpuTot").innerHTML = tot.toFixed(0) + "<small>%</small>";
-      const pts = hist.map((v, i) => `${(i * 300 / 59).toFixed(1)},${(66 - v * 0.6).toFixed(1)}`);
-      $("#cpuSpark").innerHTML = `<line x1="0" y1="36" x2="300" y2="36" stroke="var(--line)" stroke-dasharray="3 4"/>
-        <polygon fill="var(--accent-soft)" points="0,70 ${pts.join(" ")} 300,70"/><polyline fill="none" stroke="var(--accent)" stroke-width="1.8" points="${pts.join(" ")}"/>
-        <circle cx="300" cy="${pts[59].split(",")[1]}" r="3.5" fill="var(--accent)"/>`;
+      document.querySelectorAll("#cpuBars i").forEach((el, i) => { const v = Math.max(3, Math.min(97, (i < 4 ? 40 : 18) + (Math.random() - .5) * 40)); sum += v; el.style.height = v + "%"; });
+      const tot = sum / 10; cpuH.push(tot); cpuH.shift();
+      const g = Math.max(2, Math.min(95, gpuH[gpuH.length - 1] + (Math.random() - .5) * 6)); gpuH.push(g); gpuH.shift();
+      $("#cpuTot").innerHTML = tot.toFixed(0) + "<small>%</small>"; $("#gpuTot").innerHTML = g.toFixed(0) + "<small>%</small>";
+      $("#cpuSparkWrap").innerHTML = sparkSVG("cs", cpuH, 100); $("#gpuSparkWrap").innerHTML = sparkSVG("gs", gpuH, 100, "var(--ai)");
+      [["device", g], ["renderer", g * 0.95], ["tiler", g * 0.75]].forEach(([k, v]) => { $("#g_" + k).textContent = v.toFixed(0) + "%"; $("#gm_" + k).style.width = v + "%"; });
     };
     tick(); timers.push(setInterval(tick, 1000));
   },
+  memory() {
+    document.querySelectorAll("[data-quit-mem]").forEach(b => b.onclick = () => { STATE.quit.add(b.dataset.quitMem); toast(`Would quit ${b.dataset.quitMem} (prototype)`); renderNav(); rerender(); });
+    $("#quitAllMem").onclick = () => { ["Microsoft Teams", "Slack", "Microsoft Outlook", "Cliq", "Docker"].forEach(n => STATE.quit.add(n)); toast("Would quit 5 idle apps (prototype)"); renderNav(); rerender(); };
+    $("#restartBtn").onclick = () => toast("Would show macOS's restart dialog (prototype)");
+  },
   storage() {
-    const upd = () => {
-      let s = 0; D.clean.forEach((c, i) => { if ($("#cl" + i).checked) s += c[1]; });
-      $("#cleanSum").textContent = s.toFixed(1) + " GB selected"; $("#cleanBtn").disabled = s === 0;
-    };
-    D.clean.forEach((c, i) => $("#cl" + i).onchange = upd); upd();
-    $("#cleanBtn").onclick = () => toast("Would move " + $("#cleanSum").textContent.replace(" selected", "") + " to Trash (prototype: nothing deleted)");
+    const sa = $("#selAll"); sa.indeterminate = STATE.clean.size > 0 && STATE.clean.size < D.clean.length;
+    sa.onchange = () => { if (sa.checked) D.clean.forEach(c => STATE.clean.add(c.id)); else STATE.clean.clear(); rerender(); };
+    document.querySelectorAll("[data-clean]").forEach(cb => cb.onchange = () => { cb.checked ? STATE.clean.add(cb.dataset.clean) : STATE.clean.delete(cb.dataset.clean); rerender(); });
+    $("#cleanBtn").onclick = () => toast("Would ask to confirm, then move the selected items to the Trash (prototype)");
   },
   network() {
-    $("#netTest").onclick = () => {
-      const b = $("#netTest"); b.disabled = true; b.textContent = "Testing…";
-      let n = 0; const t = setInterval(() => {
-        n++; $("#nDown").innerHTML = (Math.random() * 300 + 100).toFixed(0) + "<small>Mbps</small>"; $("#nUp").innerHTML = (Math.random() * 60 + 20).toFixed(0) + "<small>Mbps</small>";
-        if (n > 12) { clearInterval(t); $("#nDown").innerHTML = "412<small>Mbps</small>"; $("#nUp").innerHTML = "58<small>Mbps</small>"; b.disabled = false; b.textContent = "Run network test"; toast("Test finished (simulated values)"); }
-      }, 150); timers.push(t);
-    };
-  },
-  startup() {
-    document.querySelectorAll("[data-su]").forEach(el => el.onchange = () => {
-      const i = +el.dataset.su; STATE.startup[i] = el.checked;
-      toast((el.checked ? "Would turn on " : "Would turn off ") + D.startup[i][0]);
-      if (STATE.startup.filter(Boolean).length <= 4) { STATE.fixed.add("startup"); renderNav(); }
-    });
-  },
-  hardware() {
-    const done = new Set();
-    const keyEl = code => {
-      if (code === "ArrowUp" || code === "ArrowDown") code = "ArrowUpDown";
-      return document.querySelector(`.key[data-code="${code}"]`);
-    };
-    const onDown = e => {
-      if (STATE.view !== "hardware") return;
-      const el = keyEl(e.code); if (!el) return;
-      e.preventDefault(); el.classList.add("down"); done.add(el.dataset.code); el.classList.add("done");
-      $("#kbCount").textContent = done.size + " of 59 keys tested";
-    };
-    const onUp = e => { const el = keyEl(e.code); if (el) el.classList.remove("down"); };
-    document.onkeydown = onDown; document.onkeyup = onUp;
-    $("#kbReset").onclick = () => { done.clear(); document.querySelectorAll(".key").forEach(k => k.classList.remove("done", "down")); $("#kbCount").textContent = "0 keys tested"; };
-
-    $("#pxBtn").onclick = () => {
-      const colors = ["#ff0000", "#00ff00", "#0000ff", "#ffffff", "#000000"]; let i = 0;
-      const ov = document.createElement("div"); ov.className = "pixel"; ov.style.background = colors[0];
-      ov.innerHTML = "<span>Click for next color · Esc to exit</span>"; document.body.appendChild(ov);
-      ov.requestFullscreen?.().catch(() => {});
-      const close = () => { ov.remove(); document.removeEventListener("keydown", esc); if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); };
-      const esc = e => { if (e.key === "Escape") close(); };
-      document.addEventListener("keydown", esc);
-      ov.onclick = () => { i++; if (i >= colors.length) close(); else { ov.style.background = colors[i]; ov.firstElementChild.style.opacity = i > 0 ? .5 : 1; } };
-    };
-
-    document.querySelectorAll("[data-tone]").forEach(b => b.onclick = () => {
-      try {
-        audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-        const pan = +b.dataset.tone, o = audioCtx.createOscillator(), g = audioCtx.createGain(), p = audioCtx.createStereoPanner();
-        const now = audioCtx.currentTime; p.pan.value = pan; o.frequency.setValueAtTime(pan === 0 ? 120 : 440, now);
-        if (pan === 0) o.frequency.exponentialRampToValueAtTime(4000, now + 2.4);
-        g.gain.setValueAtTime(0.0001, now); g.gain.exponentialRampToValueAtTime(0.18, now + 0.05); g.gain.exponentialRampToValueAtTime(0.0001, now + (pan === 0 ? 2.5 : 1));
-        o.connect(g).connect(p).connect(audioCtx.destination); o.start(now); o.stop(now + 2.6);
-      } catch (e) { toast("Audio is not available in this browser"); }
-    });
-
-    const c = $("#tp"), ctx = c.getContext("2d"); const dpr = window.devicePixelRatio || 1;
-    c.width = c.clientWidth * dpr; c.height = c.clientHeight * dpr; ctx.scale(dpr, dpr);
-    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue("--accent"); ctx.lineWidth = 2.5; ctx.lineCap = "round";
-    let last = null;
-    c.onpointermove = e => { const r = c.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
-      if (last) { ctx.beginPath(); ctx.moveTo(last[0], last[1]); ctx.lineTo(x, y); ctx.stroke(); } last = [x, y]; };
-    c.onpointerleave = () => last = null;
+    const b = $("#speedBtn"); if (b) b.onclick = startSpeed;
+    const c = $("#cancelSpeed"); if (c) c.onclick = () => { clearInterval(speedTimer); Object.assign(STATE.speed, { running: false, phase: -1, series: [] }); rerender(); };
   },
   report() {
-    $("#copyRep").onclick = () => {
-      const txt = $("#rep").value;
-      navigator.clipboard.writeText(txt).then(() => toast("Report copied")).catch(() => { $("#rep").focus(); $("#rep").select(); toast("Press ⌘C to copy the selected report"); });
-    };
+    $("#copyRep").onclick = () => navigator.clipboard.writeText($("#rep").value).then(() => toast("Report copied")).catch(() => { $("#rep").select(); toast("Press ⌘C to copy"); });
   }
 };
 

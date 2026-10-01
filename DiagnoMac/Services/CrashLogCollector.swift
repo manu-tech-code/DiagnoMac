@@ -34,6 +34,7 @@ enum CrashLogCollector {
         var process = fallbackProcessName(name)
         var bugType: String?
         var firstParty = false
+        var bundleID: String?
 
         if let handle = try? FileHandle(forReadingFrom: url) {
             defer { try? handle.close() }
@@ -41,13 +42,19 @@ enum CrashLogCollector {
                let header = try? JSONSerialization.jsonObject(with: data[..<newline]) as? [String: Any] {
                 process = (header["app_name"] as? String) ?? (header["name"] as? String) ?? process
                 bugType = header["bug_type"] as? String
-                firstParty = (header["is_first_party"] as? Int) == 1 || ((header["bundleID"] as? String)?.hasPrefix("com.apple.") ?? false)
+                bundleID = header["bundleID"] as? String
+                firstParty = (header["is_first_party"] as? Int) == 1 || (bundleID?.hasPrefix("com.apple.") ?? false)
             }
         }
 
         let kind = classify(bugType: bugType, fileName: name, ext: url.pathExtension)
         if kind == .panic { process = "Kernel" }
-        return CrashReport(url: url, process: process, date: modified, kind: kind, isFirstParty: firstParty)
+        // Jetsam reports describe macOS killing processes to free memory, not one app crashing.
+        if process.hasPrefix("JetsamEvent") {
+            process = "macOS low-memory events"
+            firstParty = true
+        }
+        return CrashReport(url: url, process: process, date: modified, kind: kind, isFirstParty: firstParty, bundleID: bundleID)
     }
 
     /// "Music-2026-09-29-224212.ips" -> "Music"
