@@ -1,0 +1,732 @@
+<title>DiagnoMac</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Schibsted+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: an instrument-panel app shell. Fixed sidebar of check areas, main pane shows one area at a time. Collapses to a scrolling tab strip on phones. */
+:root {
+  --bg: #e9edf1;
+  --panel: #fbfcfd;
+  --sunk: #f1f4f7;
+  --ink: #141a21;
+  --muted: #5b6672;
+  --line: #d6dde4;
+  --accent: #2844d2;
+  --accent-soft: #e3e8fd;
+  --ok: #1d8659;
+  --ok-soft: #dff2e8;
+  --warn: #a8670d;
+  --warn-soft: #fbefd9;
+  --crit: #c2342a;
+  --crit-soft: #fbe3e0;
+  --f-display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --f-body: "Schibsted Grotesk", -apple-system, "Helvetica Neue", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1115; --panel: #151a20; --sunk: #10151a; --ink: #e5eaf0; --muted: #8b97a4; --line: #252d36;
+    --accent: #8299ff; --accent-soft: #1d2547; --ok: #42c08a; --ok-soft: #12291f; --warn: #e2a640; --warn-soft: #2d2311;
+    --crit: #f06c61; --crit-soft: #321715; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1115; --panel: #151a20; --sunk: #10151a; --ink: #e5eaf0; --muted: #8b97a4; --line: #252d36;
+  --accent: #8299ff; --accent-soft: #1d2547; --ok: #42c08a; --ok-soft: #12291f; --warn: #e2a640; --warn-soft: #2d2311;
+  --crit: #f06c61; --crit-soft: #321715; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.5 var(--f-body); }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+
+.shell { display: grid; grid-template-columns: 228px 1fr; min-height: 100%; }
+.side { border-right: 1px solid var(--line); padding: 20px 12px; display: flex; flex-direction: column; gap: 18px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; }
+.brand svg { flex: none; }
+.brand b { font: 700 19px/1 var(--f-display); letter-spacing: -0.01em; }
+.brand small { display: block; color: var(--muted); font-size: 11.5px; margin-top: 3px; }
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav button { display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; border: 0; background: none; padding: 7px 10px; border-radius: 7px; color: var(--muted); font-weight: 500; }
+.nav button:hover { background: var(--sunk); color: var(--ink); }
+.nav button[aria-current="page"] { background: var(--panel); color: var(--ink); box-shadow: 0 0 0 1px var(--line); }
+.dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--ok); }
+.dot.warn { background: var(--warn); } .dot.crit { background: var(--crit); } .dot.none { background: transparent; border: 1px solid var(--line); }
+.nav-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); padding: 0 10px; margin-bottom: 2px; }
+.side-foot { margin-top: auto; padding: 0 10px; font-size: 12px; color: var(--muted); display: grid; gap: 4px; }
+
+main { padding: 28px clamp(16px, 4vw, 44px) 60px; min-width: 0; max-width: 1180px; }
+.head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }
+.head h1 { font: 700 clamp(24px, 3vw, 32px)/1.1 var(--f-display); margin: 0; letter-spacing: -0.015em; text-wrap: balance; }
+.head p { margin: 6px 0 0; color: var(--muted); max-width: 62ch; }
+.btn { border: 1px solid var(--line); background: var(--panel); padding: 7px 14px; border-radius: 8px; font-weight: 500; display: inline-flex; align-items: center; gap: 7px; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+:root[data-theme="dark"] .btn.primary { color: #0d1115; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn.primary { color: #0d1115; } }
+.btn.small { padding: 4px 10px; font-size: 13px; }
+.btn:disabled { opacity: .55; cursor: default; }
+
+.grid { display: grid; gap: 14px; }
+.g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.g4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 16px 18px; min-width: 0; }
+.card h2 { font: 600 13px/1.3 var(--f-body); text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); margin: 0 0 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.span2 { grid-column: span 2; }
+.span-all { grid-column: 1 / -1; }
+
+.stat .v { font: 500 26px/1.1 var(--f-mono); letter-spacing: -0.02em; }
+.stat .v small { font-size: 14px; color: var(--muted); margin-left: 3px; }
+.stat .k { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
+
+.pill { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
+.pill.ok { background: var(--ok-soft); color: var(--ok); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.crit { background: var(--crit-soft); color: var(--crit); }
+.pill.info { background: var(--accent-soft); color: var(--accent); }
+.pill.sample { background: var(--sunk); color: var(--muted); border: 1px dashed var(--line); font-weight: 500; }
+
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 7px 18px; margin: 0; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; text-align: right; font-family: var(--f-mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+
+.issues { display: flex; flex-direction: column; }
+.issue { display: grid; grid-template-columns: 4px 1fr auto; gap: 14px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); }
+.issue:first-child { border-top: 0; padding-top: 2px; }
+.issue .bar { align-self: stretch; border-radius: 2px; background: var(--ok); }
+.issue .bar.warn { background: var(--warn); } .issue .bar.crit { background: var(--crit); } .issue .bar.info { background: var(--accent); }
+.issue b { font-weight: 600; display: block; }
+.issue span { color: var(--muted); font-size: 13px; }
+.issue .acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+
+.meter { height: 8px; border-radius: 99px; background: var(--sunk); overflow: hidden; display: flex; box-shadow: inset 0 0 0 1px var(--line); }
+.meter i { display: block; height: 100%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 2px; background: var(--c); margin-right: 6px; vertical-align: -1px; }
+
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; padding: 0 8px 8px 0; border-bottom: 1px solid var(--line); }
+td { padding: 9px 8px 9px 0; border-bottom: 1px solid var(--line); vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+td.num, th.num { text-align: right; font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.tw { overflow-x: auto; }
+.trunc { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.score { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; }
+.score svg { flex: none; }
+.score .num { font: 700 44px/1 var(--f-display); }
+.score h3 { margin: 0 0 4px; font: 600 18px/1.25 var(--f-display); }
+.score p { margin: 0; color: var(--muted); max-width: 46ch; }
+
+.switch { position: relative; width: 34px; height: 20px; flex: none; }
+.switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.switch i { position: absolute; inset: 0; border-radius: 99px; background: var(--line); transition: background .15s; pointer-events: none; }
+.switch i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--panel); transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+.switch input:checked + i { background: var(--ok); }
+.switch input:checked + i::after { transform: translateX(14px); }
+.switch input:focus-visible + i { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.cores { display: grid; grid-template-columns: repeat(10, 1fr); gap: 6px; align-items: end; height: 120px; }
+.core { display: flex; flex-direction: column; align-items: center; gap: 5px; height: 100%; justify-content: flex-end; }
+.core .col { width: 100%; background: var(--sunk); border-radius: 4px; flex: 1; position: relative; overflow: hidden; box-shadow: inset 0 0 0 1px var(--line); }
+.core .col i { position: absolute; left: 0; right: 0; bottom: 0; background: var(--accent); transition: height .5s; border-radius: 0 0 4px 4px; }
+.core.e .col i { background: color-mix(in srgb, var(--accent) 55%, var(--panel)); }
+.core small { font: 11px var(--f-mono); color: var(--muted); }
+
+.kbd { display: flex; flex-direction: column; gap: 5px; overflow-x: auto; padding-bottom: 4px; }
+.krow { display: flex; gap: 5px; }
+.key { flex: var(--w, 1) 0 0; min-width: 30px; height: 34px; border: 1px solid var(--line); border-radius: 6px; background: var(--sunk); display: grid; place-items: center; font: 11px var(--f-mono); color: var(--muted); transition: background .1s; }
+.key.down { background: var(--accent); color: var(--panel); border-color: var(--accent); }
+.key.done { background: var(--ok-soft); color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--line)); }
+
+.scanbar { height: 3px; background: var(--sunk); border-radius: 99px; overflow: hidden; margin-top: 14px; }
+.scanbar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .25s; }
+.note { font-size: 12.5px; color: var(--muted); margin-top: 10px; }
+.toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 8px; font-size: 13.5px; z-index: 50; max-width: calc(100% - 32px); }
+.pixel { position: fixed; inset: 0; z-index: 60; display: grid; place-items: end center; padding-bottom: 30px; cursor: pointer; }
+.pixel span { background: rgba(0,0,0,.55); color: #fff; padding: 6px 12px; border-radius: 6px; font-size: 13px; }
+.spark { width: 100%; height: 70px; display: block; }
+textarea.rep { width: 100%; min-height: 260px; font: 12.5px/1.55 var(--f-mono); background: var(--sunk); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 12px; resize: vertical; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.spread { justify-content: space-between; }
+
+@media (max-width: 980px) { .g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .g3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) {
+  .shell { grid-template-columns: 1fr; }
+  .side { position: sticky; top: env(safe-area-inset-top, 0px); height: auto; z-index: 10; background: var(--bg); border-right: 0; border-bottom: 1px solid var(--line); padding: 12px 16px 8px; gap: 10px; }
+  .nav { flex-direction: row; overflow-x: auto; gap: 4px; padding-bottom: 4px; }
+  .nav button { white-space: nowrap; flex: none; }
+  .nav-label, .side-foot { display: none; }
+  .g2, .g3 { grid-template-columns: 1fr; }
+  .span2 { grid-column: auto; }
+  .issue { grid-template-columns: 4px 1fr; }
+  .issue .acts { grid-column: 2; justify-content: flex-start; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="shell">
+  <aside class="side">
+    <div class="brand">
+      <svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><rect x="1" y="1" width="28" height="28" rx="8" fill="var(--accent)"/><path d="M6 16h4l2.5-6 4 11 2.5-5H24" fill="none" stroke="var(--panel)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div><b>DiagnoMac</b><small>MacBook Pro · M5</small></div>
+    </div>
+    <div>
+      <div class="nav-label">Checks</div>
+      <nav class="nav" id="nav"></nav>
+    </div>
+    <div class="side-foot">
+      <span>Snapshot taken 1 Oct 2026, 16:56</span>
+      <span>Prototype · no changes made to this Mac</span>
+    </div>
+  </aside>
+  <main id="main"></main>
+</div>
+
+<script>
+const D = {
+  machine: { model: "MacBook Pro (Mac17,2)", chip: "Apple M5", cores: "10 (4 Super, 6 Efficiency)", gpu: "10-core", mem: "24 GB", disk: "1 TB SSD (APPLE SSD AP1024Z)", os: "macOS 27.0.1 (26A434)", uptime: "9 h 23 min", firmware: "20457.1.29", displays: "Built-in XDR 3024×1964 · External 1920×1080" },
+  battery: { pct: 100, cycles: 16, maxCap: 100, design: 6249, full: 6351, nominal: 6503, remaining: 6337, condition: "Normal", source: "Battery", tte: 292, charger: "Not connected" },
+  load: [6.45, 4.45, 3.09],
+  procs: [
+    ["WindowServer", 51.3, 0.5, "System"], ["Claude Helper (Renderer)", 18.7, 2.7, "Claude"], ["DynamicIsland", 17.9, 0.3, "Dynamic Island"],
+    ["Claude Helper", 14.5, 0.3, "Claude"], ["claude (Claude Code)", 10.9, 1.4, "Claude"], ["Music", 8.8, 0.9, "Apple"], ["zsh", 6.7, 0.0, "System"]
+  ],
+  mem: { total: 24, wired: 3.01, active: 5.76, inactive: 5.71, free: 1.41, compressedOther: 8.11, swapUsed: 2.83, swapTotal: 4.0, freePct: 55, pageouts: 25648 },
+  disk: { cap: 994.6, free: 333.4, smart: "Verified", fs: "APFS (encrypted)" },
+  clean: [
+    ["iOS 27.0 Simulator runtime", 18.56, "/Library/Developer/CoreSimulator", true],
+    ["User caches", 7.4, "~/Library/Caches", true],
+    ["Xcode DerivedData", 4.2, "~/Library/Developer/Xcode/DerivedData", false],
+    ["Homebrew download cache", 1.9, "~/Library/Caches/Homebrew", false],
+    ["Trash", 0.8, "~/.Trash", false]
+  ],
+  startup: [
+    ["com.epicgames.launcher", "Epic Games", "User agent", true, "Launches the Epic Games Launcher at login."],
+    ["com.google.GoogleUpdater.wake", "Google", "User agent", true, "Wakes Google Updater on a schedule."],
+    ["com.google.keystone.agent", "Google", "User agent", true, "Legacy Google updater."],
+    ["com.google.keystone.xpcservice", "Google", "User agent", true, "Legacy Google updater helper."],
+    ["sh.brew.mlx-lm", "Homebrew", "User agent", true, "Runs the mlx-lm service at login. Uses GPU and memory while idle."],
+    ["com.google.keystone.agent", "Google", "System agent", true, "Same updater, installed system-wide."],
+    ["com.google.keystone.xpcservice", "Google", "System agent", true, "Same updater helper, installed system-wide."],
+    ["com.microsoft.update.agent", "Microsoft", "System agent", true, "Microsoft AutoUpdate."]
+  ],
+  security: [
+    ["FileVault disk encryption", "ok", "On", "Your data is encrypted at rest."],
+    ["System Integrity Protection", "ok", "Enabled", "Protects system files from modification."],
+    ["Gatekeeper", "ok", "Enabled", "Only signed, notarized apps open without a warning."],
+    ["Firewall", "crit", "Off", "Incoming connections are not filtered. Turn it on in System Settings → Network → Firewall."],
+    ["macOS version", "ok", "27.0.1", "macOS 27 installed 16 Sep 2026."],
+    ["Activation Lock", "ok", "Enabled", "Find My protects this Mac if it is lost."]
+  ],
+  crashes: [
+    ["Dynamic Island", 14, "1 Oct 2026", "EXC_BAD_ACCESS"],
+    ["Music", 6, "29 Sep 2026", "Hang (resource)"],
+    ["Epic Games Launcher", 5, "27 Sep 2026", "EXC_CRASH (SIGABRT)"],
+    ["Safari Web Content", 3, "24 Sep 2026", "Jetsam (memory)"]
+  ]
+};
+
+const ISSUES = [
+  { id: "fw", sev: "crit", area: "security", t: "Firewall is off", d: "Incoming connections to this Mac are not filtered.", fix: "Turn on firewall" },
+  { id: "swap", sev: "warn", area: "memory", t: "Swap is 71% full", d: "2.83 of 4.0 GB swap in use with 25,648 page-outs. Apps are being pushed out of RAM.", fix: "Show memory hogs" },
+  { id: "load", sev: "warn", area: "performance", t: "High CPU load", d: "Load average 6.45 on 10 cores. WindowServer at 51% CPU, often caused by an external display or animated menu bar apps.", fix: "View processes" },
+  { id: "space", sev: "info", area: "storage", t: "26 GB can be reclaimed", d: "The iOS Simulator runtime and user caches take the most space.", fix: "Review cleanup" },
+  { id: "startup", sev: "info", area: "startup", t: "8 background agents load at login", d: "Five are updaters from Google, Microsoft and Epic. One runs a local LLM service.", fix: "Review startup items" },
+  { id: "crash", sev: "info", area: "logs", t: "Dynamic Island crashed 14 times", d: "Repeated crashes in the last week. Updating or removing the app may help.", fix: "View crash logs" }
+];
+
+const VIEWS = [
+  ["overview", "Overview"], ["battery", "Battery"], ["performance", "Performance"], ["memory", "Memory"], ["storage", "Storage"],
+  ["network", "Network"], ["security", "Security"], ["startup", "Startup items"], ["hardware", "Hardware tests"], ["logs", "Crash logs"], ["report", "Report"]
+];
+const STATE = { view: "overview", fixed: new Set(), startup: D.startup.map(s => s[3]) };
+try { const v = localStorage.getItem("dm-view"); if (v && VIEWS.some(x => x[0] === v)) STATE.view = v; } catch (e) {}
+
+function sevOf(area) {
+  const open = ISSUES.filter(i => i.area === area && !STATE.fixed.has(i.id));
+  if (open.some(i => i.sev === "crit")) return "crit";
+  if (open.some(i => i.sev === "warn")) return "warn";
+  return ["report", "hardware"].includes(area) ? "none" : "ok";
+}
+function score() {
+  let s = 100;
+  ISSUES.forEach(i => { if (!STATE.fixed.has(i.id)) s -= i.sev === "crit" ? 12 : i.sev === "warn" ? 6 : 1; });
+  return s;
+}
+const $ = s => document.querySelector(s);
+const pill = (sev, txt) => `<span class="pill ${sev}">${txt}</span>`;
+const SAMPLE = `<span class="pill sample" title="Illustrative data. The native app will read this from your Mac.">Sample data</span>`;
+const LIVE_SIM = `<span class="pill sample" title="Values animate to show the live view. They are not real readings.">Simulated live</span>`;
+function toast(msg) {
+  const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; t.setAttribute("role", "status");
+  document.body.appendChild(t); setTimeout(() => t.remove(), 2600);
+}
+
+function renderNav() {
+  $("#nav").innerHTML = VIEWS.map(([k, n]) =>
+    `<button data-view="${k}" ${STATE.view === k ? 'aria-current="page"' : ""}>${n}<i class="dot ${sevOf(k)}"></i></button>`).join("");
+}
+function go(view) {
+  STATE.view = view; try { localStorage.setItem("dm-view", view); } catch (e) {}
+  stopTimers(); renderNav(); $("#main").innerHTML = R[view](); after[view] && after[view]();
+  window.scrollTo(0, 0);
+}
+document.addEventListener("click", e => {
+  const nv = e.target.closest("[data-view]"); if (nv) { go(nv.dataset.view); return; }
+  const fx = e.target.closest("[data-fix]"); if (fx) { doFix(fx.dataset.fix); return; }
+});
+function doFix(id) {
+  const is = ISSUES.find(i => i.id === id);
+  if (id === "fw") { STATE.fixed.add("fw"); toast("Firewall would be turned on (prototype: nothing changed)"); renderNav(); go(STATE.view); return; }
+  go(is.area);
+}
+
+function header(title, sub, actions = "") {
+  return `<div class="head"><div><h1>${title}</h1><p>${sub}</p></div><div class="row">${actions}</div></div>`;
+}
+function ring(val, max, size, col) {
+  const r = size / 2 - 7, c = 2 * Math.PI * r, f = Math.max(0, Math.min(1, val / max));
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" aria-hidden="true">
+    <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="var(--sunk)" stroke-width="9"/>
+    <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${col}" stroke-width="9" stroke-linecap="round"
+      stroke-dasharray="${c * f} ${c}" transform="rotate(-90 ${size/2} ${size/2})"/></svg>`;
+}
+
+const timers = [];
+function stopTimers() { while (timers.length) clearInterval(timers.pop()); }
+
+const R = {
+  overview() {
+    const s = score(), col = s >= 90 ? "var(--ok)" : s >= 75 ? "var(--warn)" : "var(--crit)";
+    const open = ISSUES.filter(i => !STATE.fixed.has(i.id));
+    const sevRank = { crit: 0, warn: 1, info: 2 };
+    open.sort((a, b) => sevRank[a.sev] - sevRank[b.sev]);
+    const label = { crit: "Fix now", warn: "Attention", info: "Suggestion" };
+    return header("Health overview", "A summary of every check, worst first. Each finding links to the details and a fix.",
+      `<button class="btn primary" id="scan">Run full scan</button>`) + `
+    <div class="grid g3">
+      <section class="card span2">
+        <div class="score">
+          <div style="position:relative;width:132px;height:132px">${ring(s, 100, 132, col)}
+            <div style="position:absolute;inset:0;display:grid;place-items:center;text-align:center"><div><div class="num">${s}</div><div style="color:var(--muted);font-size:12px">of 100</div></div></div>
+          </div>
+          <div style="min-width:0;flex:1">
+            <h3>${s >= 90 ? "This Mac is in great shape" : "Good hardware, a few things to tidy up"}</h3>
+            <p>Battery, SSD and security basics are healthy. Memory pressure and CPU load are higher than they should be, and the firewall is off.</p>
+            <div class="row" style="margin-top:12px">${pill("crit", open.filter(i=>i.sev==="crit").length + " fix now")} ${pill("warn", open.filter(i=>i.sev==="warn").length + " attention")} ${pill("info", open.filter(i=>i.sev==="info").length + " suggestions")}</div>
+          </div>
+        </div>
+        <div class="scanbar" id="scanbar" hidden><i></i></div>
+        <div class="note" id="scanmsg" hidden></div>
+      </section>
+      <section class="card">
+        <h2>This Mac</h2>
+        <dl class="kv">
+          <dt>Model</dt><dd>MacBook Pro</dd><dt>Chip</dt><dd>${D.machine.chip}</dd><dt>Memory</dt><dd>${D.machine.mem}</dd>
+          <dt>Storage</dt><dd>1 TB</dd><dt>macOS</dt><dd>27.0.1</dd><dt>Uptime</dt><dd>${D.machine.uptime}</dd>
+        </dl>
+      </section>
+      <section class="card span-all">
+        <h2>Findings <span style="text-transform:none;letter-spacing:0;font-weight:400">${open.length} open</span></h2>
+        <div class="issues">${open.length ? open.map(i => `
+          <div class="issue"><i class="bar ${i.sev}"></i>
+            <div><div class="row" style="gap:8px"><b>${i.t}</b>${pill(i.sev, label[i.sev])}</div><span>${i.d}</span></div>
+            <div class="acts"><button class="btn small" data-fix="${i.id}">${i.fix}</button></div>
+          </div>`).join("") : `<p style="color:var(--muted)">Nothing left to fix.</p>`}
+        </div>
+      </section>
+      <section class="card stat"><h2>Battery</h2><div class="v">${D.battery.maxCap}<small>% capacity</small></div><div class="k">${D.battery.cycles} cycles · ${D.battery.condition}</div></section>
+      <section class="card stat"><h2>Storage</h2><div class="v">${D.disk.free}<small>GB free</small></div><div class="k">of ${D.disk.cap} GB · SMART ${D.disk.smart}</div></section>
+      <section class="card stat"><h2>Memory</h2><div class="v">${D.mem.freePct}<small>% free</small></div><div class="k">Swap ${D.mem.swapUsed} of ${D.mem.swapTotal} GB</div></section>
+    </div>`;
+  },
+
+  battery() {
+    const b = D.battery, wear = ((b.full / b.design) * 100).toFixed(1);
+    const hrs = Math.floor(b.tte / 60), mins = b.tte % 60;
+    // sample capacity history
+    const hist = [100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100];
+    return header("Battery", "Wear, charge and power source. Battery capacity normally drops about 1–2% per 50 cycles.") + `
+    <div class="grid g4">
+      <section class="card stat"><h2>Maximum capacity</h2><div class="v">${b.maxCap}<small>%</small></div><div class="k">${pill("ok", b.condition)}</div></section>
+      <section class="card stat"><h2>Cycle count</h2><div class="v">${b.cycles}<small>/ 1000</small></div><div class="k">Rated for 1000 cycles</div></section>
+      <section class="card stat"><h2>Charge</h2><div class="v">${b.pct}<small>%</small></div><div class="k">On battery · charger ${b.charger.toLowerCase()}</div></section>
+      <section class="card stat"><h2>Time remaining</h2><div class="v">${hrs}<small>h</small> ${mins}<small>min</small></div><div class="k">At current usage</div></section>
+      <section class="card span2">
+        <h2>Capacity</h2>
+        <dl class="kv">
+          <dt>Design capacity</dt><dd>${b.design.toLocaleString()} mAh</dd>
+          <dt>Full charge capacity</dt><dd>${b.full.toLocaleString()} mAh</dd>
+          <dt>Nominal capacity</dt><dd>${b.nominal.toLocaleString()} mAh</dd>
+          <dt>Currently stored</dt><dd>${b.remaining.toLocaleString()} mAh</dd>
+          <dt>Full charge vs design</dt><dd>${wear}%</dd>
+        </dl>
+        <div class="meter" style="margin-top:14px"><i style="width:100%;background:var(--ok)"></i></div>
+        <div class="note">New batteries often report slightly above design capacity. That is expected.</div>
+      </section>
+      <section class="card span2">
+        <h2>Capacity over 12 months ${SAMPLE}</h2>
+        <svg class="spark" viewBox="0 0 300 70" preserveAspectRatio="none" aria-label="Capacity history">
+          <line x1="0" y1="10" x2="300" y2="10" stroke="var(--line)" stroke-dasharray="3 4"/>
+          <line x1="0" y1="60" x2="300" y2="60" stroke="var(--line)" stroke-dasharray="3 4"/>
+          <polyline fill="none" stroke="var(--ok)" stroke-width="2" points="${hist.map((v, i) => `${i * 300 / 11},${10 + (100 - v) * 2.5}`).join(" ")}"/>
+          <circle cx="300" cy="10" r="3.5" fill="var(--ok)"/>
+        </svg>
+        <div class="row spread note" style="margin-top:4px"><span>Oct 2025</span><span class="mono">100% → 80% scale</span><span>Today</span></div>
+        <div class="note">The native app will log capacity daily so you can see wear over time.</div>
+      </section>
+      <section class="card span-all">
+        <h2>Power settings</h2>
+        <div class="tw"><table>
+          <tr><th>Setting</th><th class="num">On battery</th><th class="num">On power adapter</th></tr>
+          <tr><td>Display sleep</td><td class="num">60 min</td><td class="num">180 min</td></tr>
+          <tr><td>System sleep</td><td class="num">1 min</td><td class="num">1 min</td></tr>
+          <tr><td>Low Power Mode</td><td class="num">Off</td><td class="num">Off</td></tr>
+          <tr><td>Wake on network</td><td class="num">Off</td><td class="num">On</td></tr>
+        </table></div>
+        <div class="note">A 180-minute display sleep on power keeps the screen on long after you walk away. 10–15 minutes saves energy and screen wear.</div>
+      </section>
+    </div>`;
+  },
+
+  performance() {
+    const cores = Array.from({ length: 10 }, (_, i) => `<div class="core ${i >= 4 ? "e" : ""}"><div class="col"><i style="height:30%"></i></div><small>${i < 4 ? "S" : "E"}${i < 4 ? i + 1 : i - 3}</small></div>`).join("");
+    return header("Performance", "CPU load, thermal state and the processes using the most CPU.") + `
+    <div class="grid g4">
+      <section class="card stat"><h2>Load average</h2><div class="v">${D.load[0]}</div><div class="k mono">1 min · ${D.load[1]} 5 min · ${D.load[2]} 15 min</div></section>
+      <section class="card stat"><h2>CPU in use</h2><div class="v" id="cpuTot">—<small>%</small></div><div class="k">All 10 cores</div></section>
+      <section class="card stat"><h2>Thermal state</h2><div class="v">Nominal</div><div class="k">No throttling recorded</div></section>
+      <section class="card stat"><h2>GPU</h2><div class="v">10<small>cores</small></div><div class="k">Apple M5 · Metal</div></section>
+      <section class="card span2">
+        <h2>Per-core load ${LIVE_SIM}</h2>
+        <div class="cores" id="cores">${cores}</div>
+        <div class="legend"><span style="--c:var(--accent)">Super cores (S)</span><span style="--c:color-mix(in srgb, var(--accent) 55%, var(--panel))">Efficiency cores (E)</span></div>
+      </section>
+      <section class="card span2">
+        <h2>Total CPU, last 60 s ${LIVE_SIM}</h2>
+        <svg class="spark" id="cpuSpark" viewBox="0 0 300 70" preserveAspectRatio="none" aria-label="CPU history"></svg>
+        <div class="row spread note"><span>60 s ago</span><span>now</span></div>
+      </section>
+      <section class="card span-all">
+        <h2>Top processes <span style="text-transform:none;letter-spacing:0;font-weight:400">snapshot 16:56</span></h2>
+        <div class="tw"><table>
+          <tr><th>Process</th><th>App</th><th class="num">CPU %</th><th class="num">Memory %</th><th></th></tr>
+          ${D.procs.map(p => `<tr><td class="trunc">${p[0]}</td><td style="color:var(--muted)">${p[3]}</td><td class="num">${p[1].toFixed(1)}</td><td class="num">${p[2].toFixed(1)}</td>
+          <td style="text-align:right">${p[1] > 40 ? pill("warn", "High") : ""}</td></tr>`).join("")}
+        </table></div>
+        <div class="note">WindowServer draws everything on screen. High usage usually comes from an external display at a scaled resolution, many open windows, or menu bar apps that animate (such as Dynamic Island, at 17.9%).</div>
+      </section>
+    </div>`;
+  },
+
+  memory() {
+    const m = D.mem, segs = [["Wired", m.wired, "var(--crit)"], ["App memory", m.active, "var(--accent)"], ["Cached files", m.inactive, "color-mix(in srgb, var(--accent) 45%, var(--panel))"], ["Compressed + other", m.compressedOther, "var(--warn)"], ["Free", m.free, "var(--ok)"]];
+    return header("Memory", "How the 24 GB of RAM is being used, and whether macOS has to fall back to swap.") + `
+    <div class="grid g4">
+      <section class="card stat"><h2>Memory pressure</h2><div class="v">${100 - m.freePct}<small>%</small></div><div class="k">${pill("warn", "Elevated")}</div></section>
+      <section class="card stat"><h2>Swap used</h2><div class="v">${m.swapUsed}<small>/ ${m.swapTotal} GB</small></div><div class="k">Encrypted swap</div></section>
+      <section class="card stat"><h2>Page-outs</h2><div class="v">${m.pageouts.toLocaleString()}</div><div class="k">Since boot (9 h ago)</div></section>
+      <section class="card stat"><h2>Installed</h2><div class="v">${m.total}<small>GB</small></div><div class="k">Unified memory</div></section>
+      <section class="card span-all">
+        <h2>Breakdown</h2>
+        <div class="meter" style="height:18px">${segs.map(s => `<i style="width:${s[1] / m.total * 100}%;background:${s[2]}" title="${s[0]} ${s[1]} GB"></i>`).join("")}</div>
+        <div class="legend">${segs.map(s => `<span style="--c:${s[2]}">${s[0]} <b class="mono" style="color:var(--ink);font-weight:500">${s[1].toFixed(2)} GB</b></span>`).join("")}</div>
+        <div class="note">Swap at 71% with 25k page-outs after only 9 hours means apps are regularly pushed out of RAM. Closing the Claude renderer tabs and the mlx-lm background service (see Startup items) will free the most.</div>
+      </section>
+      <section class="card span-all">
+        <h2>Largest memory users ${SAMPLE}</h2>
+        <div class="tw"><table>
+          <tr><th>App</th><th class="num">Memory</th><th class="num">Compressed</th></tr>
+          <tr><td>mlx-lm (Homebrew service)</td><td class="num">6.10 GB</td><td class="num">0.40 GB</td></tr>
+          <tr><td>Claude</td><td class="num">2.60 GB</td><td class="num">0.85 GB</td></tr>
+          <tr><td>Google Chrome</td><td class="num">2.20 GB</td><td class="num">1.10 GB</td></tr>
+          <tr><td>Xcode</td><td class="num">1.70 GB</td><td class="num">0.30 GB</td></tr>
+          <tr><td>Music</td><td class="num">0.22 GB</td><td class="num">0.05 GB</td></tr>
+        </table></div>
+      </section>
+    </div>`;
+  },
+
+  storage() {
+    const used = (D.disk.cap - D.disk.free), total = D.clean.reduce((a, c) => a + c[1], 0);
+    const cats = [["Apps", 92, "var(--accent)"], ["Developer", 186, "var(--warn)"], ["Documents & media", 214, "color-mix(in srgb, var(--accent) 45%, var(--panel))"], ["System & data", used - 92 - 186 - 214, "var(--muted)"], ["Free", D.disk.free, "var(--ok)"]];
+    return header("Storage", "Drive health, what is taking space, and what you can safely remove.") + `
+    <div class="grid g4">
+      <section class="card stat"><h2>Free space</h2><div class="v">${D.disk.free}<small>GB</small></div><div class="k">${(D.disk.free / D.disk.cap * 100).toFixed(0)}% of ${D.disk.cap} GB</div></section>
+      <section class="card stat"><h2>Drive health</h2><div class="v">${D.disk.smart}</div><div class="k">S.M.A.R.T. status</div></section>
+      <section class="card stat"><h2>File system</h2><div class="v" style="font-size:20px">APFS</div><div class="k">Encrypted · Apple Fabric SSD</div></section>
+      <section class="card stat"><h2>Reclaimable</h2><div class="v">${total.toFixed(1)}<small>GB</small></div><div class="k">From ${D.clean.length} locations</div></section>
+      <section class="card span-all">
+        <h2>What is using space ${SAMPLE}</h2>
+        <div class="meter" style="height:18px">${cats.map(c => `<i style="width:${c[1] / D.disk.cap * 100}%;background:${c[2]}"></i>`).join("")}</div>
+        <div class="legend">${cats.map(c => `<span style="--c:${c[2]}">${c[0]} <b class="mono" style="color:var(--ink);font-weight:500">${c[1].toFixed(0)} GB</b></span>`).join("")}</div>
+      </section>
+      <section class="card span-all">
+        <h2>Cleanup</h2>
+        <div class="tw"><table>
+          <tr><th></th><th>Item</th><th>Location</th><th class="num">Size</th></tr>
+          ${D.clean.map((c, i) => `<tr><td style="width:28px"><input type="checkbox" id="cl${i}" ${i < 2 ? "checked" : ""} aria-label="Select ${c[0]}"></td>
+            <td><label for="cl${i}">${c[0]}</label> ${c[3] ? "" : SAMPLE}</td><td class="mono trunc" style="color:var(--muted);font-size:12px">${c[2]}</td><td class="num">${c[1].toFixed(1)} GB</td></tr>`).join("")}
+        </table></div>
+        <div class="row spread" style="margin-top:14px"><span class="note" id="cleanSum" style="margin:0"></span><button class="btn primary" id="cleanBtn">Move selected to Trash</button></div>
+      </section>
+    </div>`;
+  },
+
+  network() {
+    return header("Network", "Connection quality, latency, DNS and throughput.", `<button class="btn primary" id="netTest">Run network test</button>`) + `
+    <div class="grid g4">
+      <section class="card stat"><h2>Interface</h2><div class="v" style="font-size:20px">Wi-Fi (en0)</div><div class="k">Network name hidden by macOS privacy</div></section>
+      <section class="card stat"><h2>Latency</h2><div class="v" id="nLat">31.5<small>ms</small></div><div class="k">To 1.1.1.1 · jitter 0.37 ms</div></section>
+      <section class="card stat"><h2>Download</h2><div class="v" id="nDown">—<small>Mbps</small></div><div class="k">Run test to measure</div></section>
+      <section class="card stat"><h2>Upload</h2><div class="v" id="nUp">—<small>Mbps</small></div><div class="k">Run test to measure</div></section>
+      <section class="card span2">
+        <h2>Wi-Fi signal ${SAMPLE}</h2>
+        <dl class="kv">
+          <dt>Signal (RSSI)</dt><dd>−54 dBm</dd><dt>Noise</dt><dd>−92 dBm</dd><dt>SNR</dt><dd>38 dB</dd>
+          <dt>Channel</dt><dd>149 (5 GHz, 80 MHz)</dd><dt>PHY mode</dt><dd>802.11ax (Wi-Fi 6)</dd><dt>Tx rate</dt><dd>1,201 Mbps</dd>
+        </dl>
+        <div class="note">An SNR above 25 dB is good. Below 15 dB you will see drops and slow speeds.</div>
+      </section>
+      <section class="card span2">
+        <h2>Checks</h2>
+        <div class="issues" id="netChecks">
+          ${[["Gateway reachable", "Router responds"], ["DNS resolution", "Resolves apple.com"], ["Internet reachable", "Ping 1.1.1.1 · 0% loss"], ["IPv6", "Global address assigned"], ["Captive portal", "None detected"]]
+            .map(c => `<div class="issue"><i class="bar"></i><div><b>${c[0]}</b><span>${c[1]}</span></div><div class="acts">${pill("ok", "Pass")}</div></div>`).join("")}
+        </div>
+      </section>
+    </div>`;
+  },
+
+  security() {
+    const items = D.security.map(s => s[0] === "Firewall" && STATE.fixed.has("fw") ? [s[0], "ok", "On", "Incoming connections are filtered."] : s);
+    return header("Security", "The protections built into macOS, and whether each one is on.") + `
+    <div class="grid g2">
+      ${items.map(s => `<section class="card"><div class="row spread"><b style="font-size:15px">${s[0]}</b>${pill(s[1], s[2])}</div>
+        <p style="color:var(--muted);margin:8px 0 0">${s[3]}</p>
+        ${s[0] === "Firewall" && s[1] === "crit" ? `<div style="margin-top:12px"><button class="btn primary small" data-fix="fw">Turn on firewall</button></div>` : ""}</section>`).join("")}
+      <section class="card span2">
+        <h2>XProtect & background checks ${SAMPLE}</h2>
+        <dl class="kv"><dt>XProtect definitions</dt><dd>v5312 · updated 28 Sep 2026</dd><dt>XProtect Remediator</dt><dd>Last scan 1 Oct 2026, 03:12</dd><dt>Unsigned kernel extensions</dt><dd>None</dd><dt>Configuration profiles</dt><dd>None installed</dd></dl>
+      </section>
+    </div>`;
+  },
+
+  startup() {
+    return header("Startup items", "Background agents that start when you log in. Each one costs memory, battery and boot time.") + `
+    <div class="card"><div class="tw"><table>
+      <tr><th>Item</th><th>Vendor</th><th>Scope</th><th class="num">Runs at login</th></tr>
+      ${D.startup.map((s, i) => `<tr><td><div class="mono" style="font-size:13px">${s[0]}</div><div style="color:var(--muted);font-size:12.5px">${s[4]}</div></td>
+        <td>${s[1]}</td><td style="color:var(--muted)">${s[2]}</td>
+        <td class="num"><label class="switch"><input type="checkbox" id="su${i}" data-su="${i}" ${STATE.startup[i] ? "checked" : ""} aria-label="Run ${s[0]} at login"><i></i></label></td></tr>`).join("")}
+    </table></div>
+    <div class="note">Switching an item off unloads it with launchctl and keeps the file, so you can turn it back on. Prototype: nothing on your Mac changes.</div></div>`;
+  },
+
+  hardware() {
+    const rows = [
+      [["`",1],["1",1],["2",1],["3",1],["4",1],["5",1],["6",1],["7",1],["8",1],["9",1],["0",1],["-",1],["=",1],["⌫",1.6,"Backspace"]],
+      [["⇥",1.6,"Tab"],["Q",1],["W",1],["E",1],["R",1],["T",1],["Y",1],["U",1],["I",1],["O",1],["P",1],["[",1],["]",1],["\\",1,"Backslash"]],
+      [["⇪",1.9,"CapsLock"],["A",1],["S",1],["D",1],["F",1],["G",1],["H",1],["J",1],["K",1],["L",1],[";",1],["'",1],["↩",1.9,"Enter"]],
+      [["⇧",2.4,"ShiftLeft"],["Z",1],["X",1],["C",1],["V",1],["B",1],["N",1],["M",1],[",",1],[".",1],["/",1],["⇧",2.4,"ShiftRight"]],
+      [["fn",1,"Fn"],["⌃",1,"ControlLeft"],["⌥",1,"AltLeft"],["⌘",1.3,"MetaLeft"],["space",5.6,"Space"],["⌘",1.3,"MetaRight"],["⌥",1,"AltRight"],["←",1,"ArrowLeft"],["↑↓",1,"ArrowUpDown"],["→",1,"ArrowRight"]]
+    ];
+    const codeOf = l => ({ "`": "Backquote", "-": "Minus", "=": "Equal", "[": "BracketLeft", "]": "BracketRight", ";": "Semicolon", "'": "Quote", ",": "Comma", ".": "Period", "/": "Slash" }[l] || (/[0-9]/.test(l) ? "Digit" + l : "Key" + l));
+    return header("Hardware tests", "Interactive tests for parts a sensor cannot check for you.") + `
+    <div class="grid g2">
+      <section class="card span2">
+        <h2>Keyboard <span id="kbCount" class="mono" style="text-transform:none;letter-spacing:0;font-weight:400">0 keys tested</span></h2>
+        <div class="kbd" id="kbd">${rows.map(r => `<div class="krow">${r.map(k => `<div class="key" style="--w:${k[1]}" data-code="${k[2] || codeOf(k[0])}">${k[0]}</div>`).join("")}</div>`).join("")}</div>
+        <div class="row spread" style="margin-top:10px"><span class="note" style="margin:0">Press every key. Keys turn green once they register. A key that stays grey may be faulty.</span><button class="btn small" id="kbReset">Reset</button></div>
+      </section>
+      <section class="card">
+        <h2>Display</h2>
+        <p style="margin:0 0 12px;color:var(--muted)">Shows solid colors full screen so dead or stuck pixels stand out. Click to step through red, green, blue, white and black.</p>
+        <button class="btn primary" id="pxBtn">Start display test</button>
+      </section>
+      <section class="card">
+        <h2>Speakers</h2>
+        <p style="margin:0 0 12px;color:var(--muted)">Plays a tone on each side. Listen for crackle, buzz or one side missing.</p>
+        <div class="row"><button class="btn" data-tone="-1">Left</button><button class="btn" data-tone="1">Right</button><button class="btn" data-tone="0">Sweep both</button></div>
+      </section>
+      <section class="card">
+        <h2>Trackpad</h2>
+        <p style="margin:0 0 12px;color:var(--muted)">Draw across the whole pad. Gaps in the line point to dead zones.</p>
+        <canvas id="tp" style="width:100%;height:150px;background:var(--sunk);border-radius:8px;border:1px solid var(--line);display:block;touch-action:none"></canvas>
+      </section>
+      <section class="card">
+        <h2>Camera, microphone, sensors</h2>
+        <p style="margin:0;color:var(--muted)">Camera and microphone checks, ambient light sensor, lid angle, fan and temperature sensors need the native app. They are planned for version 1.</p>
+        <div class="row" style="margin-top:12px">${pill("info", "Native only")}</div>
+      </section>
+    </div>`;
+  },
+
+  logs() {
+    return header("Crash logs", "Apps that crashed or froze, grouped by app. 90 reports on file, no kernel panics.") + `
+    <div class="grid g3">
+      <section class="card stat"><h2>Kernel panics</h2><div class="v">0</div><div class="k">${pill("ok", "None")}</div></section>
+      <section class="card stat"><h2>Crash reports</h2><div class="v">90</div><div class="k">In ~/Library/Logs/DiagnosticReports</div></section>
+      <section class="card stat"><h2>Unexpected shutdowns</h2><div class="v">0</div><div class="k">Last 30 days</div></section>
+      <section class="card span-all">
+        <h2>Most frequent ${SAMPLE}</h2>
+        <div class="tw"><table>
+          <tr><th>App</th><th class="num">Crashes (7 days)</th><th>Last seen</th><th>Reason</th></tr>
+          ${D.crashes.map(c => `<tr><td>${c[0]}</td><td class="num">${c[1]}</td><td style="color:var(--muted)">${c[2]}</td><td class="mono" style="font-size:12.5px">${c[3]}</td></tr>`).join("")}
+        </table></div>
+        <div class="note">The native app will parse each .ips report and explain the likely cause in plain language.</div>
+      </section>
+    </div>`;
+  },
+
+  report() {
+    return header("Report", "A plain-text summary to send to IT, Apple Support, or a repair shop. Serial numbers are left out unless you add them.",
+      `<button class="btn primary" id="copyRep">Copy report</button>`) + `
+    <div class="card"><textarea class="rep" id="rep" readonly aria-label="Report text">${reportText()}</textarea></div>`;
+  }
+};
+
+function reportText() {
+  const m = D.machine, b = D.battery, open = ISSUES.filter(i => !STATE.fixed.has(i.id));
+  return `DiagnoMac report · 1 Oct 2026 16:56
+Health score: ${score()}/100
+
+MACHINE
+  ${m.model}, ${m.chip}, ${m.cores} cores
+  ${m.mem} RAM, ${m.disk}
+  ${m.os}, uptime ${m.uptime}
+  Displays: ${m.displays}
+
+BATTERY
+  ${b.maxCap}% max capacity, ${b.cycles} cycles, condition ${b.condition}
+  Full charge ${b.full} mAh / design ${b.design} mAh
+
+STORAGE
+  ${D.disk.free} GB free of ${D.disk.cap} GB, SMART ${D.disk.smart}
+
+MEMORY
+  ${D.mem.freePct}% free, swap ${D.mem.swapUsed}/${D.mem.swapTotal} GB, ${D.mem.pageouts} page-outs
+
+CPU
+  Load average ${D.load.join(" / ")}
+
+FINDINGS
+${open.map(i => `  [${i.sev.toUpperCase()}] ${i.t}: ${i.d}`).join("\n")}`;
+}
+
+/* post-render hooks */
+let audioCtx;
+const after = {
+  overview() {
+    $("#scan").onclick = () => {
+      const btn = $("#scan"), bar = $("#scanbar"), msg = $("#scanmsg"), steps = ["battery", "CPU and thermals", "memory", "storage", "network", "security", "startup items", "crash logs"];
+      btn.disabled = true; bar.hidden = false; msg.hidden = false; let i = 0;
+      const t = setInterval(() => {
+        if (i >= steps.length) { clearInterval(t); msg.textContent = "Scan complete. 8 areas checked."; btn.disabled = false; return; }
+        msg.textContent = "Checking " + steps[i] + "…"; bar.firstElementChild.style.width = ((i + 1) / steps.length * 100) + "%"; i++;
+      }, 380);
+      timers.push(t);
+    };
+  },
+  performance() {
+    const hist = Array.from({ length: 60 }, () => 28 + Math.random() * 18);
+    const tick = () => {
+      let sum = 0;
+      document.querySelectorAll("#cores .core i").forEach((el, i) => {
+        const base = i < 4 ? 45 : 25, v = Math.max(3, Math.min(98, base + (Math.random() - .5) * 50)); sum += v; el.style.height = v + "%";
+      });
+      const tot = sum / 10; hist.push(tot); hist.shift();
+      $("#cpuTot").innerHTML = tot.toFixed(0) + "<small>%</small>";
+      const pts = hist.map((v, i) => `${(i * 300 / 59).toFixed(1)},${(66 - v * 0.6).toFixed(1)}`);
+      $("#cpuSpark").innerHTML = `<line x1="0" y1="36" x2="300" y2="36" stroke="var(--line)" stroke-dasharray="3 4"/>
+        <polygon fill="var(--accent-soft)" points="0,70 ${pts.join(" ")} 300,70"/><polyline fill="none" stroke="var(--accent)" stroke-width="1.8" points="${pts.join(" ")}"/>
+        <circle cx="300" cy="${pts[59].split(",")[1]}" r="3.5" fill="var(--accent)"/>`;
+    };
+    tick(); timers.push(setInterval(tick, 1000));
+  },
+  storage() {
+    const upd = () => {
+      let s = 0; D.clean.forEach((c, i) => { if ($("#cl" + i).checked) s += c[1]; });
+      $("#cleanSum").textContent = s.toFixed(1) + " GB selected"; $("#cleanBtn").disabled = s === 0;
+    };
+    D.clean.forEach((c, i) => $("#cl" + i).onchange = upd); upd();
+    $("#cleanBtn").onclick = () => toast("Would move " + $("#cleanSum").textContent.replace(" selected", "") + " to Trash (prototype: nothing deleted)");
+  },
+  network() {
+    $("#netTest").onclick = () => {
+      const b = $("#netTest"); b.disabled = true; b.textContent = "Testing…";
+      let n = 0; const t = setInterval(() => {
+        n++; $("#nDown").innerHTML = (Math.random() * 300 + 100).toFixed(0) + "<small>Mbps</small>"; $("#nUp").innerHTML = (Math.random() * 60 + 20).toFixed(0) + "<small>Mbps</small>";
+        if (n > 12) { clearInterval(t); $("#nDown").innerHTML = "412<small>Mbps</small>"; $("#nUp").innerHTML = "58<small>Mbps</small>"; b.disabled = false; b.textContent = "Run network test"; toast("Test finished (simulated values)"); }
+      }, 150); timers.push(t);
+    };
+  },
+  startup() {
+    document.querySelectorAll("[data-su]").forEach(el => el.onchange = () => {
+      const i = +el.dataset.su; STATE.startup[i] = el.checked;
+      toast((el.checked ? "Would turn on " : "Would turn off ") + D.startup[i][0]);
+      if (STATE.startup.filter(Boolean).length <= 4) { STATE.fixed.add("startup"); renderNav(); }
+    });
+  },
+  hardware() {
+    const done = new Set();
+    const keyEl = code => {
+      if (code === "ArrowUp" || code === "ArrowDown") code = "ArrowUpDown";
+      return document.querySelector(`.key[data-code="${code}"]`);
+    };
+    const onDown = e => {
+      if (STATE.view !== "hardware") return;
+      const el = keyEl(e.code); if (!el) return;
+      e.preventDefault(); el.classList.add("down"); done.add(el.dataset.code); el.classList.add("done");
+      $("#kbCount").textContent = done.size + " of 59 keys tested";
+    };
+    const onUp = e => { const el = keyEl(e.code); if (el) el.classList.remove("down"); };
+    document.onkeydown = onDown; document.onkeyup = onUp;
+    $("#kbReset").onclick = () => { done.clear(); document.querySelectorAll(".key").forEach(k => k.classList.remove("done", "down")); $("#kbCount").textContent = "0 keys tested"; };
+
+    $("#pxBtn").onclick = () => {
+      const colors = ["#ff0000", "#00ff00", "#0000ff", "#ffffff", "#000000"]; let i = 0;
+      const ov = document.createElement("div"); ov.className = "pixel"; ov.style.background = colors[0];
+      ov.innerHTML = "<span>Click for next color · Esc to exit</span>"; document.body.appendChild(ov);
+      ov.requestFullscreen?.().catch(() => {});
+      const close = () => { ov.remove(); document.removeEventListener("keydown", esc); if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); };
+      const esc = e => { if (e.key === "Escape") close(); };
+      document.addEventListener("keydown", esc);
+      ov.onclick = () => { i++; if (i >= colors.length) close(); else { ov.style.background = colors[i]; ov.firstElementChild.style.opacity = i > 0 ? .5 : 1; } };
+    };
+
+    document.querySelectorAll("[data-tone]").forEach(b => b.onclick = () => {
+      try {
+        audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+        const pan = +b.dataset.tone, o = audioCtx.createOscillator(), g = audioCtx.createGain(), p = audioCtx.createStereoPanner();
+        const now = audioCtx.currentTime; p.pan.value = pan; o.frequency.setValueAtTime(pan === 0 ? 120 : 440, now);
+        if (pan === 0) o.frequency.exponentialRampToValueAtTime(4000, now + 2.4);
+        g.gain.setValueAtTime(0.0001, now); g.gain.exponentialRampToValueAtTime(0.18, now + 0.05); g.gain.exponentialRampToValueAtTime(0.0001, now + (pan === 0 ? 2.5 : 1));
+        o.connect(g).connect(p).connect(audioCtx.destination); o.start(now); o.stop(now + 2.6);
+      } catch (e) { toast("Audio is not available in this browser"); }
+    });
+
+    const c = $("#tp"), ctx = c.getContext("2d"); const dpr = window.devicePixelRatio || 1;
+    c.width = c.clientWidth * dpr; c.height = c.clientHeight * dpr; ctx.scale(dpr, dpr);
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue("--accent"); ctx.lineWidth = 2.5; ctx.lineCap = "round";
+    let last = null;
+    c.onpointermove = e => { const r = c.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+      if (last) { ctx.beginPath(); ctx.moveTo(last[0], last[1]); ctx.lineTo(x, y); ctx.stroke(); } last = [x, y]; };
+    c.onpointerleave = () => last = null;
+  },
+  report() {
+    $("#copyRep").onclick = () => {
+      const txt = $("#rep").value;
+      navigator.clipboard.writeText(txt).then(() => toast("Report copied")).catch(() => { $("#rep").focus(); $("#rep").select(); toast("Press ⌘C to copy the selected report"); });
+    };
+  }
+};
+
+go(STATE.view);
+</script>

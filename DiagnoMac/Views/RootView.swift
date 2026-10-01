@@ -1,0 +1,85 @@
+import SwiftUI
+
+struct RootView: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        @Bindable var model = model
+        NavigationSplitView {
+            List(selection: $model.selection) {
+                Section("Checks") {
+                    ForEach(Area.allCases) { area in
+                        NavigationLink(value: area) {
+                            HStack {
+                                Label(area.title, systemImage: area.systemImage)
+                                Spacer()
+                                if area.showsHealth && (model.lastScan != nil || model.severity(for: area) > .ok) {
+                                    SeverityDot(severity: model.severity(for: area))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationSplitViewColumnWidth(min: 200, ideal: 220)
+            .safeAreaInset(edge: .bottom) { scanFooter }
+        } detail: {
+            detail(for: model.selection ?? .overview)
+                .overlay(alignment: .bottom) { banner }
+        }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    Task { await model.scan() }
+                } label: {
+                    Label("Run Full Scan", systemImage: "arrow.clockwise")
+                }
+                .disabled(model.isScanning)
+                .help("Run every check again (⌘R)")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func detail(for area: Area) -> some View {
+        switch area {
+        case .overview: OverviewView()
+        case .battery: BatteryView()
+        case .performance: PerformanceView()
+        case .memory: MemoryView()
+        case .storage: StorageView()
+        case .network: NetworkView()
+        case .security: SecurityView()
+        case .startup: StartupView()
+        case .hardware: HardwareTestsView()
+        case .logs: CrashLogsView()
+        case .report: ReportView()
+        }
+    }
+
+    private var scanFooter: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if model.isScanning {
+                ProgressView(value: model.scanProgress).controlSize(.small)
+                Text(model.scanStatus).font(.caption).foregroundStyle(.secondary)
+            } else if let last = model.lastScan {
+                Text("Last scan \(last.formatted(date: .omitted, time: .shortened))").font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var banner: some View {
+        if let text = model.banner {
+            Text(text)
+                .padding(.horizontal, 16).padding(.vertical, 10)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                .shadow(radius: 8, y: 2)
+                .padding(.bottom, 20)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .animation(.spring, value: model.banner)
+        }
+    }
+}

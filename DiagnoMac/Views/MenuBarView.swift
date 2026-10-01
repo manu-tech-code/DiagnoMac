@@ -1,0 +1,79 @@
+import SwiftUI
+
+struct MenuBarView: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 14) {
+                ScoreRing(score: model.score, size: 64)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("DiagnoMac").font(.headline)
+                    Text(summary).font(.callout).foregroundStyle(.secondary)
+                }
+            }
+
+            Divider()
+
+            Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 8) {
+                GridRow {
+                    Text("CPU").foregroundStyle(.secondary)
+                    ProgressView(value: model.cpuNow?.total ?? 0)
+                    Text(Format.percent(model.cpuNow?.total ?? 0)).monospacedDigit().frame(width: 44, alignment: .trailing)
+                }
+                if let mem = model.liveMemory {
+                    GridRow {
+                        Text("Memory").foregroundStyle(.secondary)
+                        ProgressView(value: Double(100 - mem.availablePercent) / 100)
+                        Text("\(100 - mem.availablePercent)%").monospacedDigit().frame(width: 44, alignment: .trailing)
+                    }
+                    GridRow {
+                        Text("Swap").foregroundStyle(.secondary)
+                        ProgressView(value: mem.swapFraction)
+                        Text(Format.percent(mem.swapFraction)).monospacedDigit().frame(width: 44, alignment: .trailing)
+                    }
+                }
+                if let battery = model.snapshot.battery {
+                    GridRow {
+                        Text("Battery").foregroundStyle(.secondary)
+                        ProgressView(value: Double(battery.chargePercent) / 100)
+                        Text("\(battery.chargePercent)%").monospacedDigit().frame(width: 44, alignment: .trailing)
+                    }
+                }
+            }
+
+            if let top = model.findings.first {
+                Divider()
+                HStack(alignment: .top, spacing: 8) {
+                    SeverityDot(severity: top.severity).padding(.top, 5)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(top.title).fontWeight(.medium)
+                        Text(top.detail).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                    }
+                }
+            }
+
+            Divider()
+
+            HStack {
+                Button("Open DiagnoMac") {
+                    openWindow(id: "main")
+                    NSApp.activate()
+                }
+                .keyboardShortcut(.defaultAction)
+                Spacer()
+                Button("Scan") { Task { await model.scan() } }.disabled(model.isScanning)
+                Button("Quit") { NSApp.terminate(nil) }
+            }
+        }
+        .padding(16)
+        .frame(width: 320)
+    }
+
+    private var summary: String {
+        if model.isScanning { return "Scanning…" }
+        let count = model.findings.filter { $0.severity >= .warning }.count
+        return count == 0 ? "No problems found" : "\(count) item\(count == 1 ? "" : "s") need attention"
+    }
+}
