@@ -22,10 +22,26 @@ enum DebugCapture {
     static var outputDirectory: URL? { value("-captureScreens").map { URL(fileURLWithPath: $0, isDirectory: true) } }
 
     static func runIfRequested(model: AppModel) {
+        // `-dumpWindows <file>`: after 6 seconds, write the windows and activation policy, then quit.
+        if let path = value("-dumpWindows") {
+            Task {
+                try? await Task.sleep(for: .seconds(6))
+                var out = "policy=\(NSApp.activationPolicy().rawValue) modelWindowVisible=\(model.isWindowVisible) selection=\(model.selection?.rawValue ?? "nil")\n"
+                for w in NSApp.windows where w.frame.width > 100 {
+                    out += "id=\(w.identifier?.rawValue ?? "nil") visible=\(w.isVisible) onscreen=\(w.occlusionState.contains(.visible)) \(Int(w.frame.width))x\(Int(w.frame.height))\n"
+                }
+                try? out.write(toFile: path, atomically: true, encoding: .utf8)
+                NSApp.terminate(nil)
+            }
+            return
+        }
         guard let dir = outputDirectory else { return }
         Task {
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             while model.lastScan == nil { try? await Task.sleep(for: .milliseconds(300)) }
+            for w in NSApp.windows where w.frame.width > 200 {
+                NSLog("DiagnoMac capture: window id=%@ visible=%d", w.identifier?.rawValue ?? "nil", w.isVisible ? 1 : 0)
+            }
             if let delay = value("-captureDelay").flatMap(Double.init) { try? await Task.sleep(for: .seconds(delay)) }
 
             if let question = value("-captureAsk") {
@@ -56,6 +72,17 @@ enum DebugCapture {
                 try? await Task.sleep(for: .seconds(1))
             }
 
+            if args.contains("-captureUpdateWindow") {
+                model.updates.debugWindow(.found, version: value("-captureUpdateVersion") ?? "0.2.0")
+                try? await Task.sleep(for: .seconds(4))
+                if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "update" }), let view = window.contentView,
+                   let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                    view.cacheDisplay(in: view.bounds, to: rep)
+                    try? rep.representation(using: .png, properties: [:])?.write(to: dir.appending(path: "update-window.png"))
+                    window.close()
+                }
+            }
+
             for area in Area.allCases {
                 model.selection = area
                 try? await Task.sleep(for: .seconds(1.5))
@@ -67,7 +94,7 @@ enum DebugCapture {
     }
 
     private static func capture(to url: URL) {
-        guard let window = NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil && $0.frame.width > 600 }),
+        guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue == AppDelegate.mainWindowID && $0.isVisible }),
               let view = window.contentView,
               let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
         view.cacheDisplay(in: view.bounds, to: rep)
@@ -76,7 +103,10 @@ enum DebugCapture {
 
     /// Writes the AI output and report as text, so they can be checked without reading screenshots.
     private static func dumpText(model: AppModel, to dir: URL) {
-        var out = "AVAILABILITY: \(model.intelligence.availability)\n\n"
+        var out = "AVAILABILITY: \(model.intelligence.availability)\n"
+        out += "POLICY: \(NSApp.activationPolicy().rawValue) WINDOW VISIBLE (model): \(model.isWindowVisible)\n"
+        for w in NSApp.windows { out += "WINDOW id=\(w.identifier?.rawValue ?? "nil") visible=\(w.isVisible) frame=\(Int(w.frame.width))x\(Int(w.frame.height))\n" }
+        out += "ARGS: \(ProcessInfo.processInfo.arguments.dropFirst().joined(separator: " "))\n\n"
         for message in model.intelligence.messages {
             out += "[\(message.role)] \(message.text)\(message.error.map { " ERROR: \($0)" } ?? "")\n  read: \(message.sectionsRead)\n"
         }

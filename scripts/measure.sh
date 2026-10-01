@@ -14,11 +14,13 @@ ROOT="${0:A:h:h}"
 COUNTER="$ROOT/build/window-count"
 [[ -x "$COUNTER" ]] || swiftc -O "$ROOT/scripts/window-count.swift" -o "$COUNTER"
 
-# A launch sometimes comes up without its window; retry rather than measure a windowless app.
+# Retry if the launch failed or came up without its window, rather than measure nothing.
 for attempt in 1 2 3; do
   pkill -x DiagnoMac 2>/dev/null || true
-  # Wait for the previous copy to finish quitting first.
+  # Wait for the previous copy to finish quitting first; LaunchServices refuses a relaunch
+  # (error -600) while it still has the old copy registered.
   for _ in {1..50}; do pgrep -x DiagnoMac >/dev/null || break; sleep 0.2; done
+  sleep 2
   # Through LaunchServices: a binary run directly isn't registered with its bundle and gets no windows.
   if [[ "$MODE" == menubar ]]; then
     open -n "$APP" --args -menuBarOnly

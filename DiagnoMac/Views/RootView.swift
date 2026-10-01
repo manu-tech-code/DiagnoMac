@@ -70,6 +70,15 @@ struct RootView: View {
 
     private var scanFooter: some View {
         VStack(alignment: .leading, spacing: 6) {
+            if let version = model.updates.available {
+                Button { model.updates.checkForUpdates() } label: {
+                    Label("Update to \(version)", systemImage: "arrow.down.circle.fill")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .help("Install DiagnoMac \(version)")
+            }
             if model.isScanning {
                 ProgressView(value: model.scanProgress).controlSize(.small)
                 Text(model.scanStatus).font(.caption).foregroundStyle(.secondary)

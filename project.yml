@@ -1,3 +1,5 @@
+# Generates DiagnoMac.xcodeproj. Run `xcodegen generate` after adding or removing files.
+# The generated project is not committed.
 name: DiagnoMac
 options:
   bundleIdPrefix: com.amalitech
@@ -7,14 +9,21 @@ options:
 packages:
   DiagnoKit:
     path: Packages/DiagnoKit
+  # Updates: checks the appcast on GitHub, verifies the EdDSA signature, installs.
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: 2.10.0
 
 settings:
   base:
     SWIFT_VERSION: "6.0"
     MACOSX_DEPLOYMENT_TARGET: "15.0"
-    CODE_SIGN_IDENTITY: "-"
+    # Signed with your Apple Development certificate, like dynamic_island: every version
+    # has the same identity, which Sparkle checks before installing an update.
+    DEVELOPMENT_TEAM: KNK4UH42NN
     CODE_SIGN_STYLE: Manual
-    ENABLE_HARDENED_RUNTIME: NO
+    CODE_SIGN_IDENTITY: "Apple Development"
+    ENABLE_HARDENED_RUNTIME: YES
     DEAD_CODE_STRIPPING: YES
 targets:
   DiagnoMac:
@@ -25,6 +34,7 @@ targets:
     dependencies:
       - package: DiagnoKit
         product: DiagnoCore
+      - package: Sparkle
     info:
       path: DiagnoMac/Resources/Info.plist
       properties:
@@ -37,10 +47,23 @@ targets:
         NSCameraUsageDescription: "DiagnoMac shows a live preview so you can check that your camera works. Video never leaves your Mac."
         NSAppleEventsUsageDescription: "DiagnoMac asks macOS to show its restart dialog when you choose Restart on the Memory page."
         NSMicrophoneUsageDescription: "DiagnoMac shows an input level meter so you can check that your microphone works. Audio is never recorded or sent anywhere."
+        # Sparkle: the appcast attached to the latest GitHub release, checked daily.
+        # SUPublicEDKey is the public half of the update key in the login Keychain
+        # (account com.amalitech.DiagnoMac); see CONTRIBUTING.md.
+        SUFeedURL: https://github.com/manu-tech-code/DiagnoMac/releases/latest/download/appcast.xml
+        SUPublicEDKey: 1820xl8dN4SKhltFG+BUOjCM4heQqrsQ9d6YKqaStiI=
+        SUEnableAutomaticChecks: true
+        SUScheduledCheckInterval: 86400
+        SUVerifyUpdateBeforeExtraction: true
     entitlements:
       path: DiagnoMac/Resources/DiagnoMac.entitlements
       properties:
         com.apple.security.app-sandbox: false
+        # The hardened runtime asks for these explicitly: the camera and microphone tests,
+        # and the Apple event that opens macOS's restart dialog.
+        com.apple.security.device.camera: true
+        com.apple.security.device.audio-input: true
+        com.apple.security.automation.apple-events: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.amalitech.DiagnoMac
