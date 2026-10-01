@@ -14,11 +14,27 @@ enum Format {
         String(format: "%.2f GB", Double(value) / 1_073_741_824)
     }
 
-    static func duration(_ seconds: TimeInterval) -> String {
+    // Formatters are expensive to create and safe to share once configured.
+    private static let hoursFormatter: DateComponentsFormatter = {
         let f = DateComponentsFormatter()
-        f.allowedUnits = seconds >= 86_400 ? [.day, .hour] : [.hour, .minute]
+        f.allowedUnits = [.hour, .minute]
         f.unitsStyle = .abbreviated
-        return f.string(from: seconds) ?? "—"
+        return f
+    }()
+    private static let daysFormatter: DateComponentsFormatter = {
+        let f = DateComponentsFormatter()
+        f.allowedUnits = [.day, .hour]
+        f.unitsStyle = .abbreviated
+        return f
+    }()
+    nonisolated(unsafe) private static let relativeFormatter: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .full
+        return f
+    }()
+
+    static func duration(_ seconds: TimeInterval) -> String {
+        (seconds >= 86_400 ? daysFormatter : hoursFormatter).string(from: seconds) ?? "—"
     }
 
     static func minutes(_ m: Int) -> String {
@@ -30,9 +46,7 @@ enum Format {
     }
 
     static func relative(_ date: Date) -> String {
-        let f = RelativeDateTimeFormatter()
-        f.unitsStyle = .full
-        return f.localizedString(for: date, relativeTo: Date())
+        relativeFormatter.localizedString(for: date, relativeTo: Date())
     }
 }
 

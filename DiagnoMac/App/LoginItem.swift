@@ -59,8 +59,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let defaults = UserDefaults.standard
-        guard launchedAtLogin, defaults.bool(forKey: Preferences.startInMenuBarKey),
-              defaults.bool(forKey: Preferences.showMenuBarIconKey) else { return }
+        // `-menuBarOnly` starts the way a login launch does, without a window (used by scripts/measure.sh).
+        let menuBarOnly = ProcessInfo.processInfo.arguments.contains("-menuBarOnly")
+            || (launchedAtLogin && defaults.bool(forKey: Preferences.startInMenuBarKey))
+        guard menuBarOnly, defaults.bool(forKey: Preferences.showMenuBarIconKey) else { return }
         NSApp.setActivationPolicy(.accessory)
         // SwiftUI opens the main window during launch; close it once it exists.
         DispatchQueue.main.async {

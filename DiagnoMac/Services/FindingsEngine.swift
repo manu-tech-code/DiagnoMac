@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 /// Everything one scan collected. Sections stay nil until their collector finishes.
 struct DiagnosticsSnapshot: Sendable {
@@ -18,6 +19,36 @@ struct DiagnosticsSnapshot: Sendable {
     var backup: BackupInfo?
     var devices: DevicesInfo?
     var takenAt = Date()
+}
+
+/// The scan as the UI observes it: one property per section, so a view that reads `battery`
+/// only updates when the battery reading changes, not every time anything is sampled.
+@MainActor
+@Observable
+final class LiveSnapshot {
+    var machine: MachineInfo?
+    var battery: BatteryInfo?
+    var hasBattery = true
+    var power: PowerSettings?
+    var performance: PerformanceInfo?
+    var memory: MemoryInfo?
+    var storage: StorageInfo?
+    var network: NetworkInfo?
+    var security: SecurityInfo?
+    var startup: [StartupItem]?
+    var logs: LogsInfo?
+    var gpu: GPUInfo?
+    var apps: [RunningApp]?
+    var backup: BackupInfo?
+    var devices: DevicesInfo?
+    var takenAt = Date()
+
+    /// A copy for the findings engine, the report and the on-device model.
+    var value: DiagnosticsSnapshot {
+        DiagnosticsSnapshot(machine: machine, battery: battery, hasBattery: hasBattery, power: power, performance: performance,
+                            memory: memory, storage: storage, network: network, security: security, startup: startup,
+                            logs: logs, gpu: gpu, apps: apps, backup: backup, devices: devices, takenAt: takenAt)
+    }
 }
 
 /// Turns raw readings into ranked, actionable findings.

@@ -27,6 +27,14 @@ struct RootView: View {
             detail(for: model.selection ?? .overview)
                 .overlay(alignment: .bottom) { banner }
         }
+        // Sampling follows what's on screen: fast while the window shows live readings,
+        // slow once it's closed, minimized or covered by other windows.
+        .onAppear { model.setWindowVisible(true) }
+        .onDisappear { model.setWindowVisible(false) }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didChangeOcclusionStateNotification)) { note in
+            guard let window = note.object as? NSWindow, window.identifier?.rawValue == AppDelegate.mainWindowID else { return }
+            model.setWindowVisible(window.isVisible && window.occlusionState.contains(.visible))
+        }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -73,16 +81,18 @@ struct RootView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    @ViewBuilder
     private var banner: some View {
-        if let text = model.banner {
-            Text(text)
-                .padding(.horizontal, 16).padding(.vertical, 10)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
-                .shadow(radius: 8, y: 2)
-                .padding(.bottom, 20)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .animation(.spring, value: model.banner)
+        // The container always exists, so the banner can animate both in and out.
+        ZStack {
+            if let text = model.banner {
+                Text(text)
+                    .padding(.horizontal, 16).padding(.vertical, 10)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                    .shadow(radius: 8, y: 2)
+                    .padding(.bottom, 20)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
+        .animation(.smooth(duration: 0.4), value: model.banner)
     }
 }
