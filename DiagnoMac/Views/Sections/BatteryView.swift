@@ -465,27 +465,55 @@ private struct FlowCurrent: NSViewRepresentable {
 private struct PowerChart: View {
     let samples: [PowerSample]
 
+    /// Readings further apart than this, such as either side of sleep, aren't joined by a line. They
+    /// come every 2 seconds while the page is open and every 2 minutes at the slowest otherwise.
+    private static let maxGap: TimeInterval = 3 * 60
+
+    private struct Reading: Identifiable {
+        let sample: PowerSample
+        /// The unbroken run of readings this one belongs to. Each run is drawn as its own line.
+        let run: Int
+        var id: Date { sample.date }
+    }
+
     var body: some View {
-        if samples.count < 2 {
+        // Always the full 10 minutes, so the time labels stay a fixed 2 minutes apart.
+        let end = Date()
+        let start = end.addingTimeInterval(-PowerSample.window)
+        let readings = Self.readings(samples.filter { $0.date >= start })
+        if readings.count < 2 {
             Text("Collecting readings…").foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 150)
         } else {
-            Chart {
-                ForEach(samples) { s in
-                    // Drawn wide and underneath, so it stays visible when it matches the Mac's own use.
-                    LineMark(x: .value("Time", s.date), y: .value("Watts", s.input), series: .value("Series", "From charger"))
-                        .foregroundStyle(by: .value("Series", "From charger"))
-                        .lineStyle(StrokeStyle(lineWidth: 5))
-                        .opacity(0.45)
-                    LineMark(x: .value("Time", s.date), y: .value("Watts", max(0, s.battery)), series: .value("Series", "Into battery"))
-                        .foregroundStyle(by: .value("Series", "Into battery"))
-                    LineMark(x: .value("Time", s.date), y: .value("Watts", s.system), series: .value("Series", "Running the Mac"))
-                        .foregroundStyle(by: .value("Series", "Running the Mac"))
-                }
+            Chart(readings) { r in
+                // Drawn wide and underneath, so it stays visible when it matches the Mac's own use.
+                LineMark(x: .value("Time", r.sample.date), y: .value("Watts", r.sample.input), series: .value("Run", "From charger \(r.run)"))
+                    .foregroundStyle(by: .value("Series", "From charger"))
+                    .lineStyle(StrokeStyle(lineWidth: 5))
+                    .opacity(0.45)
+                LineMark(x: .value("Time", r.sample.date), y: .value("Watts", max(0, r.sample.battery)), series: .value("Run", "Into battery \(r.run)"))
+                    .foregroundStyle(by: .value("Series", "Into battery"))
+                LineMark(x: .value("Time", r.sample.date), y: .value("Watts", r.sample.system), series: .value("Run", "Running the Mac \(r.run)"))
+                    .foregroundStyle(by: .value("Series", "Running the Mac"))
             }
             .chartForegroundStyleScale(["From charger": Color.accentColor, "Into battery": Color.green, "Running the Mac": Color.orange])
+            .chartXScale(domain: start...end)
             .chartYAxis { AxisMarks { value in AxisGridLine(); AxisValueLabel { Text("\(value.as(Int.self) ?? 0) W") } } }
-            .chartXAxis { AxisMarks(values: .stride(by: .minute, count: 2)) { _ in AxisGridLine(); AxisValueLabel(format: .dateTime.hour().minute()) } }
+            .chartXAxis {
+                AxisMarks(values: .stride(by: .minute, count: 2)) { _ in
+                    AxisGridLine()
+                    AxisValueLabel(format: .dateTime.hour(.defaultDigits(amPM: .omitted)).minute(), collisionResolution: .greedy)
+                }
+            }
             .frame(height: 170)
+        }
+    }
+
+    /// Numbers the readings by run, starting a new run wherever there's a gap.
+    private static func readings(_ samples: [PowerSample]) -> [Reading] {
+        var run = 0
+        return samples.indices.map { i in
+            if i > 0, samples[i].date.timeIntervalSince(samples[i - 1].date) > maxGap { run += 1 }
+            return Reading(sample: samples[i], run: run)
         }
     }
 }
