@@ -58,7 +58,7 @@ final class UpdateWindowController: NSObject, NSWindowDelegate {
 }
 
 /// DiagnoMac's cobalt, from the app icon.
-private enum Brand {
+enum Brand {
     static let light = Color(red: 0.29, green: 0.42, blue: 1.00)
     static let mid = Color(red: 0.16, green: 0.27, blue: 0.82)
     static let deep = Color(red: 0.09, green: 0.14, blue: 0.56)
