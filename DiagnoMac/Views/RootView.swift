@@ -83,7 +83,7 @@ struct RootView: View {
     }
 
     private var updateButton: some View {
-        SidebarUpdateButton(available: model.updates.available, lastChecked: { model.updates.lastChecked }) {
+        UpdateButton(available: model.updates.available, lastChecked: { model.updates.lastChecked }) {
             model.updates.checkForUpdates()
         }
     }
@@ -101,65 +101,5 @@ struct RootView: View {
             }
         }
         .animation(.smooth(duration: 0.4), value: model.banner)
-    }
-}
-
-/// The sidebar's update button: Check for Updates, until a check finds a version. Then it turns
-/// into the update, in the app icon's cobalt, so it's noticed.
-private struct SidebarUpdateButton: View {
-    let available: String?
-    /// Read on each refresh: Sparkle's last check date isn't observable.
-    let lastChecked: () -> Date?
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 10) {
-                Image(systemName: available == nil ? "arrow.triangle.2.circlepath" : "arrow.down.circle.fill")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(available == nil ? AnyShapeStyle(Brand.light) : AnyShapeStyle(.white))
-                    .frame(width: 22)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(available.map { "Update to \($0)" } ?? "Check for Updates")
-                        .font(.system(size: 13, weight: .semibold))
-                    // Once a minute, so "checked 5 min ago" stays true.
-                    TimelineView(.periodic(from: .now, by: 60)) { _ in
-                        Text(subtitle).font(.caption).opacity(0.75).lineLimit(1)
-                    }
-                }
-                Spacer(minLength: 0)
-            }
-        }
-        .buttonStyle(SidebarUpdateButtonStyle(prominent: available != nil))
-        .help(available.map { "Install DiagnoMac \($0)" } ?? "See if there's a newer DiagnoMac")
-        .animation(.smooth(duration: 0.4), value: available)
-    }
-
-    private var subtitle: String {
-        if available != nil { return "Ready to install" }
-        return lastChecked().map { "Checked \($0.formatted(.relative(presentation: .named, unitsStyle: .abbreviated)))" } ?? "See what's new"
-    }
-}
-
-private struct SidebarUpdateButtonStyle: ButtonStyle {
-    let prominent: Bool
-    @State private var hovering = false
-
-    func makeBody(configuration: Configuration) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
-        configuration.label
-            .foregroundStyle(prominent ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .frame(maxWidth: .infinity)
-            .background(shape.fill(prominent ? AnyShapeStyle(Brand.gradient) : AnyShapeStyle(.quaternary)))
-            .overlay(shape.strokeBorder(.white.opacity(prominent ? 0.25 : 0.08)))
-            .shadow(color: prominent ? Brand.mid.opacity(0.35) : .clear, radius: 8, y: 3)
-            .brightness(hovering ? 0.06 : 0)
-            .opacity(configuration.isPressed ? 0.8 : 1)
-            .contentShape(shape)
-            .onHover { hovering = $0 }
-            .animation(.easeOut(duration: 0.15), value: hovering)
-            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
     }
 }
