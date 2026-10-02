@@ -1,4 +1,5 @@
 import AppKit
+import DiagnoCore
 import Foundation
 import Observation
 #if canImport(FoundationModels)
@@ -147,12 +148,13 @@ final class Intelligence {
     private func readForTool(_ section: DiagnosticsSection) -> String {
         updateLastAssistant { if !$0.sectionsRead.contains(section.title) { $0.sectionsRead.append(section.title) } }
         guard let current = context?() else { return "No readings yet. A scan is still running." }
-        return DiagnosticsDescriber.describe(section, current.0, findings: current.1)
+        return DiagnosticsDescriber.describe(section, current.0, findings: current.1) + (section.facts.map { "\nGood to know: \($0)" } ?? "")
     }
 
     #if canImport(FoundationModels)
     @available(macOS 26.0, *)
     private func runChat(_ question: String, allowRetry: Bool) async {
+        let isFollowUp = chatSession != nil
         let session: LanguageModelSession
         if let existing = chatSession as? LanguageModelSession {
             session = existing
@@ -163,20 +165,30 @@ final class Intelligence {
             chatSession = session
         }
 
-        // Give the model the readings this question is about; it can still call readMac for more.
-        let sections = DiagnosticsSection.relevant(to: question)
+        // Give the model only the readings this question is about, and what it needs to know about them;
+        // it can still call readMac for more. Handed every finding, it summarizes them instead of answering.
+        // A follow-up like "how do I turn that on?" names no part and builds on the conversation so far.
+        let current = self.context?()
+        let named = current.map { DiagnosticsSection.naming(question, in: $0.0) } ?? []
+        var sections = Array((named + DiagnosticsSection.relevant(to: question).filter { !named.contains($0) }).prefix(3))
+        if sections.isEmpty && !isFollowUp { sections = [.overview] }
         var context = ""
-        if let current = self.context?() {
-            context = sections.map { "[\($0.title)]\n" + String(DiagnosticsDescriber.describe($0, current.0, findings: current.1).prefix(900)) }
-                .joined(separator: "\n\n")
+        if let current {
+            context = sections.map { section in
+                "[\(section.title)]\n" + String(DiagnosticsDescriber.describe(section, current.0, findings: current.1).prefix(900))
+                    + (section.facts.map { "\nGood to know: \($0)" } ?? "")
+            }.joined(separator: "\n\n")
+            let notes = DiagnosticsSection.notes(for: question)
+            if !notes.isEmpty { context += "\n\nGood to know: " + notes.joined(separator: " ") }
         }
         updateLastAssistant { message in
             for s in sections where !message.sectionsRead.contains(s.title) { message.sectionsRead.append(s.title) }
         }
-        let prompt = context.isEmpty ? question : "Question: \(question)\n\nCurrent readings from this Mac:\n\(context)"
+        // The question goes last, where the small model pays the most attention to it.
+        let prompt = context.isEmpty ? question : "Readings from this Mac:\n\(context)\n\nQuestion: \(question)"
 
         do {
-            for try await partial in FMBridge.stream(session: session, prompt: prompt) {
+            for try await partial in FMBridge.stream(session: session, prompt: prompt, options: FMBridge.chatOptions) {
                 updateLastAssistant { $0.text = partial }
             }
             updateLastAssistant { $0.isStreaming = false }
@@ -207,11 +219,7 @@ final class Intelligence {
 
 enum AIPrompts {
     /// Facts the on-device model tends to get wrong without being told.
-    static let macFacts = """
-    Facts: deleting caches or files frees disk space, not memory (RAM), and doesn't make the Mac faster unless the disk \
-    is nearly full. To free memory, quit idle apps, close browser tabs, or restart. Swap is memory stored on the SSD when RAM is full. Crashes in macOS's own processes are fixed by macOS updates, \
-    not by the owner. Time Machine needs an external or network disk.
-    """
+    static let macFacts = "Facts: " + DiagnosticsSection.commonFacts
 
     static let explainInstructions = """
     You explain one Mac diagnostic finding to the Mac's owner, who isn't technical. Use only the facts provided; never invent numbers. \
@@ -278,15 +286,13 @@ enum AIPrompts {
 @available(macOS 26.0, *)
 enum FMBridge {
     static let chatInstructions = """
-    You are the assistant inside DiagnoMac, a diagnostics app running on this Mac. Answer questions about this Mac's health. \
-    Each question comes with current readings from this Mac. Answer from those; call readMac only if you need a part that isn't included. \
-    Never guess or invent numbers; if something isn't available, say so. Answer the question that was asked, using specific names and numbers. \
-    Keep answers under 120 words, in plain sentences: no bullet points, numbered lists, headings or markdown. \
-    When something needs fixing, end with one concrete step. \
-    Only suggest quitting apps listed as idle, and never suggest quitting Finder or DiagnoMac. \
-    DiagnoMac can quit apps (Running Apps), free memory (Memory), clean caches (Storage), turn off startup items (Startup Items) \
-    and turn on the firewall (Security).
-    \(AIPrompts.macFacts)
+    You are the assistant in DiagnoMac, a diagnostics app on this Mac, talking with the Mac's owner. \
+    Answer the owner's question directly in your first sentence, then add at most three sentences that back it up. \
+    Each question comes with readings from this Mac and things that are good to know, which you know as your own \
+    knowledge: don't say where they came from. Use only what helps answer the question, and leave out readings and \
+    problems it isn't about. Quote a number only when it matters to the answer. \
+    If you need readings that weren't included, call readMac. Never invent numbers; if something wasn't measured, say so. \
+    Write plain sentences: no lists, headings or markdown.
     """
 
     static func availability() -> Intelligence.Availability {
@@ -311,12 +317,15 @@ enum FMBridge {
         stream(session: LanguageModelSession(instructions: instructions), prompt: prompt)
     }
 
+    /// Less random than the default, so asking the same thing twice gets the same kind of answer.
+    static let chatOptions = GenerationOptions(temperature: 0.4)
+
     /// Each element is the full response so far.
-    static func stream(session: LanguageModelSession, prompt: String) -> AsyncThrowingStream<String, Error> {
+    static func stream(session: LanguageModelSession, prompt: String, options: GenerationOptions = GenerationOptions()) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    for try await snapshot in session.streamResponse(to: prompt) {
+                    for try await snapshot in session.streamResponse(to: prompt, options: options) {
                         continuation.yield(snapshot.content)
                     }
                     continuation.finish()
