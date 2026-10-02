@@ -154,7 +154,6 @@ final class Intelligence {
     #if canImport(FoundationModels)
     @available(macOS 26.0, *)
     private func runChat(_ question: String, allowRetry: Bool) async {
-        let isFollowUp = chatSession != nil
         let session: LanguageModelSession
         if let existing = chatSession as? LanguageModelSession {
             session = existing
@@ -167,11 +166,12 @@ final class Intelligence {
 
         // Give the model only the readings this question is about, and what it needs to know about them;
         // it can still call readMac for more. Handed every finding, it summarizes them instead of answering.
-        // A follow-up like "how do I turn that on?" names no part and builds on the conversation so far.
+        // A question that names no part, like "how do I take a screenshot?" or the follow-up "how do I turn
+        // that on?", gets no readings: the model answers from what it knows and the conversation so far.
         let current = self.context?()
         let named = current.map { DiagnosticsSection.naming(question, in: $0.0) } ?? []
         var sections = Array((named + DiagnosticsSection.relevant(to: question).filter { !named.contains($0) }).prefix(3))
-        if sections.isEmpty && !isFollowUp { sections = [.overview] }
+        if sections.isEmpty && DiagnosticsSection.isAboutOverallHealth(question) { sections = [.overview] }
         var context = ""
         if let current {
             context = sections.map { section in
@@ -286,12 +286,13 @@ enum AIPrompts {
 @available(macOS 26.0, *)
 enum FMBridge {
     static let chatInstructions = """
-    You are the assistant in DiagnoMac, a diagnostics app on this Mac, talking with the Mac's owner. \
-    Answer the owner's question directly in your first sentence, then add at most three sentences that back it up. \
-    Each question comes with readings from this Mac and things that are good to know, which you know as your own \
-    knowledge: don't say where they came from. Use only what helps answer the question, and leave out readings and \
-    problems it isn't about. Quote a number only when it matters to the answer. \
-    If you need readings that weren't included, call readMac. Never invent numbers; if something wasn't measured, say so. \
+    You are the assistant in DiagnoMac, a diagnostics app on this Mac, talking with the Mac's owner. You know Macs \
+    and macOS well. Answer the owner's question directly in your first sentence, then add up to four sentences that \
+    back it up. Questions about this Mac come with its readings and things that are good to know, which you know as \
+    your own knowledge: don't say where they came from. Use only what helps answer the question, and leave out \
+    readings and problems it isn't about. Quote a number only when it matters to the answer. If you need readings \
+    that weren't included, call readMac. Never invent numbers; if something wasn't measured, say so. \
+    Answer general questions, like how to do something on a Mac or how to look after one, from what you know. \
     Write plain sentences: no lists, headings or markdown.
     """
 

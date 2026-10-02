@@ -45,10 +45,19 @@ import Testing
         #expect(DiagnosticsSection.notes(for: "Why does WindowServer use so much CPU?").isEmpty)
     }
 
-    @Test func generalQuestionsNameNoPart() {
-        // The assistant answers these from the overview.
-        #expect(DiagnosticsSection.relevant(to: "How is my Mac doing overall?").isEmpty)
-        #expect(DiagnosticsSection.relevant(to: "What is intelligencetasksd?").isEmpty)
+    @Test func questionsAboutTheWholeMacReadTheOverview() {
+        for question in ["How is my Mac doing overall?", "Anything wrong with my Mac?", "What should I fix first?", "Is my Mac ok?"] {
+            #expect(DiagnosticsSection.relevant(to: question).isEmpty)
+            #expect(DiagnosticsSection.isAboutOverallHealth(question), "\(question)")
+        }
+    }
+
+    @Test func generalQuestionsGetNoReadings() {
+        // Answered from what the model knows, not from this Mac's findings.
+        for question in ["How do I take a screenshot?", "What's the difference between sleep and shutting down?", "How do I turn that on?"] {
+            #expect(DiagnosticsSection.relevant(to: question).isEmpty)
+            #expect(!DiagnosticsSection.isAboutOverallHealth(question), "\(question)")
+        }
     }
 
     @Test func readsAtMostThreeParts() {

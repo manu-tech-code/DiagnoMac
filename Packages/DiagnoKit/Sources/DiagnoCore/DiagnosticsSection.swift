@@ -25,6 +25,18 @@ extension DiagnosticsSection {
         return Array(picked.prefix(limit))
     }
 
+    /// Whether a question is about the Mac's health as a whole, like "How is my Mac doing?" or "What should
+    /// I fix?", which the overview answers. Other questions that name no part, like "How do I take a
+    /// screenshot?", get no readings: the model answers them from what it knows.
+    public static func isAboutOverallHealth(_ question: String) -> Bool {
+        let words = QuestionWords(question)
+        return [
+            "overall", "health", "healthy", "score", "problem*", "issue*", "wrong", "fix*", "status", "summar*",
+            "check up", "checkup", "diagnos*", "scan*", "finding*", "optimi*", "tune up", "maintenance",
+            "mac doing", "mac ok", "mac okay", "mac fine",
+        ].contains(where: words.mention)
+    }
+
     /// Advice for the kind of question, like why the Mac is slow or its fan is loud, that no one part's
     /// facts cover. Kept apart from those facts so it only comes up when it's asked about.
     public static func notes(for question: String) -> [String] {
