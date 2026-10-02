@@ -44,6 +44,9 @@ struct PowerTelemetry: Sendable {
 }
 
 struct PowerSample: Identifiable, Sendable {
+    /// How far back the Battery page's power chart goes.
+    static let window: TimeInterval = 10 * 60
+
     let date: Date
     let input: Double
     let battery: Double

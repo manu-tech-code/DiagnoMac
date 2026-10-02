@@ -137,7 +137,8 @@ enum FindingsEngine {
         if let p = s.performance, let cores = s.machine?.totalCores, cores > 0 {
             let load = p.loadAverage.first ?? 0
             if load > Double(cores) * 0.6 {
-                let top = p.topByCPU.first
+                // Not DiagnoMac: the processes are measured during its own scan.
+                let top = p.topByCPU.first { $0.pid != ProcessInfo.processInfo.processIdentifier }
                 out.append(Finding(id: "load", severity: load > Double(cores) ? .warning : .info, area: .performance,
                                    title: "High CPU load",
                                    detail: String(format: "Load average %.2f on %d cores.", load, cores) + (top.map { " \($0.name) is using \(Int($0.cpuPercent))% CPU." } ?? ""),
@@ -164,7 +165,7 @@ enum FindingsEngine {
             if reclaimable > 5_000_000_000 {
                 let biggest = st.cleanup.first { if case .trashContents = $0.method { true } else { false } }
                     .map { " \($0.title) is the largest." } ?? ""
-                out.append(Finding(id: "cleanup", severity: .info, area: .storage, title: "\(Format.gb(reclaimable, digits: 0)) can be reclaimed",
+                out.append(Finding(id: "cleanup", severity: .info, area: .storage, title: "\(Format.gb(reclaimable, digits: 0)) of disk space can be freed",
                                    detail: "Caches and developer files you can safely remove." + biggest,
                                    actionTitle: "Review Cleanup", action: .navigate(.storage)))
             }

@@ -1,5 +1,6 @@
 #if DEBUG
 import AppKit
+import DiagnoCore
 import SwiftUI
 
 /// Debug-only: `DiagnoMac -captureScreens /path/to/dir` waits for the first scan, then saves a
@@ -10,6 +11,7 @@ import SwiftUI
 ///   -captureDelay <seconds>   wait longer before capturing (lets idle-app detection settle)
 ///   -captureAsk "<question>"  ask the assistant and explain the top finding first
 ///   -captureSpeedTest         run a speed test and capture it mid-run and when finished
+///   -capturePowerHistory      fill the Battery page's power chart with made-up readings, with a gap
 @MainActor
 enum DebugCapture {
     private static let args = ProcessInfo.processInfo.arguments
@@ -35,6 +37,42 @@ enum DebugCapture {
             }
             return
         }
+        // `-askEach <questions.txt>`: after the first scan, asks the assistant each line in a new conversation
+        // (a line starting with "+" follows up in the same one), writes each answer and the readings it used
+        // to <questions.txt>.answers, then quits. Lines starting with "#" are skipped. Add -captureDelay to let
+        // idle-app detection settle first.
+        if let path = value("-askEach") {
+            Task {
+                while model.lastScan == nil { try? await Task.sleep(for: .milliseconds(300)) }
+                if let delay = value("-captureDelay").flatMap(Double.init) { try? await Task.sleep(for: .seconds(delay)) }
+                let ai = model.intelligence
+                ai.checkAvailabilityIfNeeded()
+                let lines = ((try? String(contentsOfFile: path, encoding: .utf8)) ?? "").split(separator: "\n")
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                    .filter { !$0.isEmpty && !$0.hasPrefix("#") }
+                var out = "AVAILABILITY: \(ai.availability)\n\n"
+                for line in lines {
+                    let followUp = line.hasPrefix("+")
+                    let question = followUp ? line.dropFirst().trimmingCharacters(in: .whitespaces) : line
+                    if !followUp { ai.resetChat() }
+                    let start = Date.now
+                    ai.send(question)
+                    while ai.isResponding { try? await Task.sleep(for: .milliseconds(200)) }
+                    let answer = ai.messages.last
+                    out += "\(followUp ? "+ " : "")Q: \(question)\n"
+                    out += "READ: \(answer?.sectionsRead.joined(separator: ", ") ?? "") (\(Int(Date.now.timeIntervalSince(start))) s)\n"
+                    out += "A: \(answer?.text ?? "")\(answer?.error.map { "\nERROR: \($0)" } ?? "")\n\n"
+                }
+                // The readings the answers drew on, to check them against.
+                out += "READINGS\n"
+                for section in DiagnosticsSection.allCases {
+                    out += "[\(section.title)]\n\(DiagnosticsDescriber.describe(section, model.snapshot.value, findings: model.findings))\n\n"
+                }
+                try? out.write(toFile: path + ".answers", atomically: true, encoding: .utf8)
+                NSApp.terminate(nil)
+            }
+            return
+        }
         guard let dir = outputDirectory else { return }
         Task {
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -43,6 +81,7 @@ enum DebugCapture {
                 NSLog("DiagnoMac capture: window id=%@ visible=%d", w.identifier?.rawValue ?? "nil", w.isVisible ? 1 : 0)
             }
             if let delay = value("-captureDelay").flatMap(Double.init) { try? await Task.sleep(for: .seconds(delay)) }
+            if args.contains("-capturePowerHistory") { model.powerHistory = madeUpPowerHistory() }
 
             if let question = value("-captureAsk") {
                 model.intelligence.send(question)
@@ -90,6 +129,18 @@ enum DebugCapture {
             }
             dumpText(model: model, to: dir)
             NSApp.terminate(nil)
+        }
+    }
+
+    /// Ten minutes of readings: every 10 seconds in the background, four minutes asleep, then every
+    /// 2 seconds with the Battery page open.
+    private static func madeUpPowerHistory() -> [PowerSample] {
+        let now = Date()
+        let secondsAgo = Array(stride(from: 590.0, to: 360, by: -10)) + Array(stride(from: 120.0, to: 0, by: -2))
+        return secondsAgo.map { ago in
+            let system = 10 + 3 * cos(ago / 15)
+            let battery = 28 + 4 * sin(ago / 25)
+            return PowerSample(date: now.addingTimeInterval(-ago), input: battery + system + 3, battery: battery, system: system)
         }
     }
 
