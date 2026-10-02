@@ -39,8 +39,8 @@ targets:
       path: DiagnoMac/Resources/Info.plist
       properties:
         CFBundleDisplayName: DiagnoMac
-        CFBundleShortVersionString: "0.2.1"
-        CFBundleVersion: "3"
+        CFBundleShortVersionString: "0.2.2"
+        CFBundleVersion: "4"
         LSApplicationCategoryType: public.app-category.utilities
         LSMinimumSystemVersion: "15.0"
         NSHumanReadableCopyright: "© 2026 Emmanuel Larbi"
@@ -53,7 +53,7 @@ targets:
         SUFeedURL: https://github.com/manu-tech-code/DiagnoMac/releases/latest/download/appcast.xml
         SUPublicEDKey: 1820xl8dN4SKhltFG+BUOjCM4heQqrsQ9d6YKqaStiI=
         SUEnableAutomaticChecks: true
-        SUScheduledCheckInterval: 86400
+        SUScheduledCheckInterval: 21600
         SUVerifyUpdateBeforeExtraction: true
     entitlements:
       path: DiagnoMac/Resources/DiagnoMac.entitlements

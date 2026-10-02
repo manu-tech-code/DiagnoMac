@@ -24,6 +24,8 @@ enum DebugCapture {
     static var outputDirectory: URL? { value("-captureScreens").map { URL(fileURLWithPath: $0, isDirectory: true) } }
 
     static func runIfRequested(model: AppModel) {
+        // `-showUpdateFound <version>`: the sidebar's update button as if a check had found that version.
+        if let version = value("-showUpdateFound") { model.updates.debugFound(version) }
         // `-dumpWindows <file>`: after 6 seconds, write the windows and activation policy, then quit.
         if let path = value("-dumpWindows") {
             Task {
