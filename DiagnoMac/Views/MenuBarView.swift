@@ -72,15 +72,11 @@ struct MenuBarView: View {
                 }
             }
 
-            if let version = model.updates.available {
-                Divider()
-                Button { model.updates.checkForUpdates() } label: {
-                    Label("DiagnoMac \(version) is available", systemImage: "arrow.down.circle.fill")
-                }
-                .buttonStyle(.link)
-            }
-
             Divider()
+
+            UpdateButton(available: model.updates.available, lastChecked: { model.updates.lastChecked }) {
+                model.updates.checkForUpdates()
+            }
 
             HStack {
                 Button("Open DiagnoMac") {
@@ -102,6 +98,6 @@ struct MenuBarView: View {
     private var summary: String {
         if model.isScanning { return "Scanning…" }
         let count = model.findings.filter { $0.severity >= .warning }.count
-        return count == 0 ? "No problems found" : "\(count) item\(count == 1 ? "" : "s") need attention"
+        return count == 0 ? "No problems found" : count == 1 ? "1 item needs attention" : "\(count) items need attention"
     }
 }

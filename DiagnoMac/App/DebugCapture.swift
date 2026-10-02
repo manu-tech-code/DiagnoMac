@@ -12,6 +12,7 @@ import SwiftUI
 ///   -captureAsk "<question>"  ask the assistant and explain the top finding first
 ///   -captureSpeedTest         run a speed test and capture it mid-run and when finished
 ///   -capturePowerHistory      fill the Battery page's power chart with made-up readings, with a gap
+///   -captureMenuBarPanel      capture the menu bar panel's contents as menubar.png
 @MainActor
 enum DebugCapture {
     private static let args = ProcessInfo.processInfo.arguments
@@ -96,6 +97,15 @@ enum DebugCapture {
                 }
             }
 
+            if args.contains("-captureMenuBarPanel") {
+                // In an ordinary window: SwiftUI's menu bar icon only opens its panel on a real click.
+                let panel = NSWindow(contentViewController: NSHostingController(rootView: MenuBarView().environment(model)))
+                panel.makeKeyAndOrderFront(nil)
+                try? await Task.sleep(for: .seconds(2))
+                capture(panel, to: dir.appending(path: "menubar.png"))
+                panel.close()
+            }
+
             if args.contains("-captureSpeedTest") {
                 model.selection = .network
                 model.runSpeedTest()
@@ -147,9 +157,12 @@ enum DebugCapture {
     }
 
     private static func capture(to url: URL) {
-        guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue == AppDelegate.mainWindowID && $0.isVisible }),
-              let view = window.contentView,
-              let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+        guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue == AppDelegate.mainWindowID && $0.isVisible }) else { return }
+        capture(window, to: url)
+    }
+
+    private static func capture(_ window: NSWindow, to url: URL) {
+        guard let view = window.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
         view.cacheDisplay(in: view.bounds, to: rep)
         try? rep.representation(using: .png, properties: [:])?.write(to: url)
     }
