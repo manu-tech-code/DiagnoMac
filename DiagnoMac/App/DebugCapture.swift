@@ -10,6 +10,7 @@ import SwiftUI
 ///   -captureDelay <seconds>   wait longer before capturing (lets idle-app detection settle)
 ///   -captureAsk "<question>"  ask the assistant and explain the top finding first
 ///   -captureSpeedTest         run a speed test and capture it mid-run and when finished
+///   -capturePowerHistory      fill the Battery page's power chart with made-up readings, with a gap
 @MainActor
 enum DebugCapture {
     private static let args = ProcessInfo.processInfo.arguments
@@ -43,6 +44,7 @@ enum DebugCapture {
                 NSLog("DiagnoMac capture: window id=%@ visible=%d", w.identifier?.rawValue ?? "nil", w.isVisible ? 1 : 0)
             }
             if let delay = value("-captureDelay").flatMap(Double.init) { try? await Task.sleep(for: .seconds(delay)) }
+            if args.contains("-capturePowerHistory") { model.powerHistory = madeUpPowerHistory() }
 
             if let question = value("-captureAsk") {
                 model.intelligence.send(question)
@@ -90,6 +92,18 @@ enum DebugCapture {
             }
             dumpText(model: model, to: dir)
             NSApp.terminate(nil)
+        }
+    }
+
+    /// Ten minutes of readings: every 10 seconds in the background, four minutes asleep, then every
+    /// 2 seconds with the Battery page open.
+    private static func madeUpPowerHistory() -> [PowerSample] {
+        let now = Date()
+        let secondsAgo = Array(stride(from: 590.0, to: 360, by: -10)) + Array(stride(from: 120.0, to: 0, by: -2))
+        return secondsAgo.map { ago in
+            let system = 10 + 3 * cos(ago / 15)
+            let battery = 28 + 4 * sin(ago / 25)
+            return PowerSample(date: now.addingTimeInterval(-ago), input: battery + system + 3, battery: battery, system: system)
         }
     }
 

@@ -25,7 +25,8 @@ final class AppModel {
     var cpuNow: CPULoad?
     /// Live GPU utilization samples, newest last.
     var gpuHistory: [Double] = []
-    /// Charger and battery power for the last 10 minutes the Battery page was open.
+    /// Charger and battery power over the last 10 minutes: every 2 seconds while the Battery page is open,
+    /// and at the background rate otherwise, so the chart already has history when the page opens.
     var powerHistory: [PowerSample] = []
     var chargeSessions: [ChargeSession] = ChargeLogStore.load().map { session in
         // A session still open from a previous run ended when the app last saw it.
@@ -298,9 +299,10 @@ final class AppModel {
         if merged.condition == nil { merged.condition = snapshot.battery?.condition }
         snapshot.battery = merged
 
-        if let t = merged.telemetry, isWindowVisible && selection == .battery {
-            powerHistory.append(PowerSample(date: Date(), input: t.systemInput, battery: t.battery, system: t.systemLoad))
-            if powerHistory.count > 300 { powerHistory.removeFirst(powerHistory.count - 300) }
+        if let t = merged.telemetry {
+            let now = Date()
+            powerHistory.removeAll { now.timeIntervalSince($0.date) > PowerSample.window }
+            powerHistory.append(PowerSample(date: now, input: t.systemInput, battery: t.battery, system: t.systemLoad))
         }
         updateChargeLog(with: merged)
     }
