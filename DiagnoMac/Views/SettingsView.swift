@@ -42,7 +42,7 @@ struct SettingsView: View {
                     Spacer()
                     Button("Check Now") { model.updates.checkForUpdates() }
                 }
-                Text("Once a day DiagnoMac looks at its latest release on GitHub. Updates are signed, and checked before they're installed.")
+                Text("When it opens and every 6 hours, DiagnoMac looks at its latest release on GitHub. Updates are signed, and checked before they're installed.")
                     .font(.caption).foregroundStyle(.secondary)
             } header: {
                 Text("Updates")

@@ -3,7 +3,7 @@ import DiagnoCore
 import Observation
 @preconcurrency import Sparkle
 
-/// Updates through Sparkle. Once a day it reads the appcast attached to the latest GitHub
+/// Updates through Sparkle. At launch and every 6 hours it reads the appcast attached to the latest GitHub
 /// release, checks the download's EdDSA signature against the key in Info.plist, and replaces
 /// the app on relaunch. Sparkle's window is replaced by ours (`UpdateDriver`): a timeline of
 /// releases with Update Now. An update found in the background shows as a banner first.
@@ -33,6 +33,12 @@ final class UpdateService: NSObject {
             NSLog("DiagnoMac updates: couldn't start (\(error.localizedDescription))")
         }
         self.updater = updater
+        // Sparkle's own schedule waits out the full interval since the last check, even across launches,
+        // so a release could go unnoticed for hours. Look at launch too, unless a check just ran.
+        if updater.automaticallyChecksForUpdates, updater.canCheckForUpdates,
+           updater.lastUpdateCheckDate.map({ Date().timeIntervalSince($0) > 3600 }) ?? true {
+            updater.checkForUpdatesInBackground()
+        }
     }
 
     var automaticallyChecks: Bool {
@@ -66,6 +72,9 @@ final class UpdateService: NSObject {
 
     /// The update window in a given step, with real notes and nothing to install.
     func debugWindow(_ phase: UpdateFlow.Phase, version: String) { driver.debugShow(phase, version: version) }
+
+    /// The sidebar as if a scheduled check had found a version.
+    func debugFound(_ version: String) { available = version }
     #endif
 }
 
