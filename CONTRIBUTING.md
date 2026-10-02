@@ -49,6 +49,19 @@ build/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys --a
 `scripts/measure.sh <DiagnoMac.app> <page|menubar>` reports CPU, energy impact, idle
 wake-ups and memory the way performance PRs show them, before and after.
 
+## Checking the assistant
+
+The on-device model is small, and a change to its prompts or readings can make it drift off topic.
+Write questions to a file, one per line (start a line with `+` to follow up in the same conversation,
+or `#` for a comment), then ask them all with a debug build:
+
+```sh
+open -n build/DerivedData/Build/Products/Debug/DiagnoMac.app --args -openPage apps -captureDelay 30 -askEach ~/questions.txt
+```
+
+After the scan, and 30 seconds for DiagnoMac to see which apps are idle, it writes each answer and the
+readings it used to `~/questions.txt.answers`, then quits. Compare the answers before and after the change.
+
 ## Pull request descriptions
 
 Describe the change under **What**, for someone who uses the app, and how you checked it
@@ -56,7 +69,8 @@ under **Checked**. Measurements go in a table, before and after.
 
 ## Tests
 
-The logic that doesn't need the app (release notes, networkQuality parsing) lives in
+The logic that doesn't need the app (release notes, networkQuality parsing, which readings
+the assistant reads for a question) lives in
 `Packages/DiagnoKit` and runs without launching anything:
 
 ```sh

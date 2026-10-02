@@ -1,5 +1,6 @@
 #if DEBUG
 import AppKit
+import DiagnoCore
 import SwiftUI
 
 /// Debug-only: `DiagnoMac -captureScreens /path/to/dir` waits for the first scan, then saves a
@@ -32,6 +33,42 @@ enum DebugCapture {
                     out += "id=\(w.identifier?.rawValue ?? "nil") visible=\(w.isVisible) onscreen=\(w.occlusionState.contains(.visible)) \(Int(w.frame.width))x\(Int(w.frame.height))\n"
                 }
                 try? out.write(toFile: path, atomically: true, encoding: .utf8)
+                NSApp.terminate(nil)
+            }
+            return
+        }
+        // `-askEach <questions.txt>`: after the first scan, asks the assistant each line in a new conversation
+        // (a line starting with "+" follows up in the same one), writes each answer and the readings it used
+        // to <questions.txt>.answers, then quits. Lines starting with "#" are skipped. Add -captureDelay to let
+        // idle-app detection settle first.
+        if let path = value("-askEach") {
+            Task {
+                while model.lastScan == nil { try? await Task.sleep(for: .milliseconds(300)) }
+                if let delay = value("-captureDelay").flatMap(Double.init) { try? await Task.sleep(for: .seconds(delay)) }
+                let ai = model.intelligence
+                ai.checkAvailabilityIfNeeded()
+                let lines = ((try? String(contentsOfFile: path, encoding: .utf8)) ?? "").split(separator: "\n")
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                    .filter { !$0.isEmpty && !$0.hasPrefix("#") }
+                var out = "AVAILABILITY: \(ai.availability)\n\n"
+                for line in lines {
+                    let followUp = line.hasPrefix("+")
+                    let question = followUp ? line.dropFirst().trimmingCharacters(in: .whitespaces) : line
+                    if !followUp { ai.resetChat() }
+                    let start = Date.now
+                    ai.send(question)
+                    while ai.isResponding { try? await Task.sleep(for: .milliseconds(200)) }
+                    let answer = ai.messages.last
+                    out += "\(followUp ? "+ " : "")Q: \(question)\n"
+                    out += "READ: \(answer?.sectionsRead.joined(separator: ", ") ?? "") (\(Int(Date.now.timeIntervalSince(start))) s)\n"
+                    out += "A: \(answer?.text ?? "")\(answer?.error.map { "\nERROR: \($0)" } ?? "")\n\n"
+                }
+                // The readings the answers drew on, to check them against.
+                out += "READINGS\n"
+                for section in DiagnosticsSection.allCases {
+                    out += "[\(section.title)]\n\(DiagnosticsDescriber.describe(section, model.snapshot.value, findings: model.findings))\n\n"
+                }
+                try? out.write(toFile: path + ".answers", atomically: true, encoding: .utf8)
                 NSApp.terminate(nil)
             }
             return
