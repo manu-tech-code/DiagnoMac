@@ -470,11 +470,11 @@ final class AppModel {
         // The first time, folders fill in as they're measured. After that the last breakdown stays up
         // until the new one is ready, rather than every row dropping to zero and growing back.
         let showPartial = snapshot.storageBreakdown == nil
+        // The model lives as long as the app, so the task can hold on to it.
         Task {
-            let breakdown = await StorageBreakdownCollector.measure { [weak self] partial, done, total in
-                guard let self else { return }
-                if showPartial { snapshot.storageBreakdown = partial }
-                storageProgress = StorageProgress(done: done, total: total)
+            let breakdown = await StorageBreakdownCollector.measure { partial, done, total in
+                if showPartial { self.snapshot.storageBreakdown = partial }
+                self.storageProgress = StorageProgress(done: done, total: total)
             }
             snapshot.storageBreakdown = breakdown
             storageProgress = nil
