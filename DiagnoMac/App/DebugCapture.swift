@@ -14,6 +14,7 @@ import SwiftUI
 ///   -capturePowerHistory      fill the Battery page's power chart with made-up readings, with a gap
 ///   -captureMenuBarPanel      capture the menu bar panel's contents as menubar.png
 ///   -captureStorageBreakdown  measure what's using the disk first, and wait for it
+///   -captureTall              make the window 2,400 points tall first, to capture long pages whole
 @MainActor
 enum DebugCapture {
     private static let args = ProcessInfo.processInfo.arguments
@@ -96,6 +97,11 @@ enum DebugCapture {
                 if let group = model.snapshot.logs?.groups(since: Date().addingTimeInterval(-7 * 86_400)).first {
                     model.explain(group)
                 }
+            }
+
+            if args.contains("-captureTall"),
+               let window = NSApp.windows.first(where: { $0.identifier?.rawValue == AppDelegate.mainWindowID }) {
+                window.setFrame(NSRect(x: window.frame.minX, y: 0, width: window.frame.width, height: 2400), display: true)
             }
 
             if args.contains("-captureStorageBreakdown") {
@@ -192,6 +198,9 @@ enum DebugCapture {
             out += "\nSTORAGE (complete: \(breakdown.isComplete), needs access: \(breakdown.needsAccess.map(\.rawValue)))\n"
             for category in breakdown.categories {
                 out += "\(category.kind.title): \(Format.bytes(category.bytes))  " + category.items.prefix(4).map { "\($0.name) \(Format.bytes($0.bytes))" }.joined(separator: ", ") + "\n"
+            }
+            for suggestion in breakdown.suggestions {
+                out += "SUGGEST \(suggestion.item.name) \(Format.bytes(suggestion.item.bytes)) [\(suggestion.kind.rawValue)]: \(suggestion.reason)\n"
             }
         }
         out += "\n\(model.reportText)\n"

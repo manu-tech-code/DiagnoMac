@@ -9,6 +9,41 @@ struct StorageBreakdown: Codable, Sendable {
     var isComplete: Bool
     /// Parts macOS wouldn't let DiagnoMac read, so their space counts as System Data.
     var needsAccess: [StorageCategory.Kind]
+    /// Big things that don't look used any more, largest first.
+    var suggestions: [StorageSuggestion] = []
+
+    /// After moving things to the Bin: they leave their categories and the suggestions, and the Bin grows.
+    mutating func movedToBin(_ moved: [StorageItem]) {
+        let paths = Set(moved.map(\.path))
+        var binned: UInt64 = 0
+        for index in categories.indices {
+            for item in categories[index].items where paths.contains(item.path) {
+                categories[index].bytes -= min(categories[index].bytes, item.bytes)
+                binned += item.bytes
+            }
+            categories[index].items.removeAll { paths.contains($0.path) }
+        }
+        suggestions.removeAll { paths.contains($0.item.path) }
+        if let bin = categories.firstIndex(where: { $0.kind == .bin }) {
+            categories[bin].bytes += binned
+        } else if binned > 0 {
+            categories.append(StorageCategory(kind: .bin, bytes: binned, items: []))
+        }
+        categories.removeAll { $0.bytes == 0 }
+        categories.sort { $0.bytes > $1.bytes }
+    }
+
+    mutating func emptiedBin() {
+        categories.removeAll { $0.kind == .bin }
+    }
+}
+
+/// Something big that doesn't look used any more, and why.
+struct StorageSuggestion: Codable, Sendable, Identifiable {
+    let item: StorageItem
+    let kind: StorageCategory.Kind
+    let reason: String
+    var id: String { item.path }
 }
 
 struct StorageCategory: Codable, Sendable, Identifiable {
@@ -92,5 +127,7 @@ struct StorageItem: Codable, Sendable, Identifiable {
     let name: String
     let path: String
     let bytes: UInt64
+    /// Your own files and apps you installed. Never libraries, Apple's apps or the system.
+    var canMoveToBin = false
     var id: String { path }
 }

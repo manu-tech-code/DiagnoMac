@@ -482,6 +482,51 @@ final class AppModel {
         }
     }
 
+    /// Moves things from the breakdown to the Bin, where they can be put back until it's emptied.
+    func moveToBin(_ items: [StorageItem]) async {
+        // An app that's open is skipped: moving it while it runs leaves it half there.
+        let open = Set(NSWorkspace.shared.runningApplications.compactMap { $0.bundleURL?.path })
+        // Why each one that didn't move stayed, by path.
+        let failures: [String: String] = await offMain {
+            var failures: [String: String] = [:]
+            for item in items {
+                if open.contains(item.path) {
+                    failures[item.path] = "\(item.name) is open"
+                } else if (try? FileManager.default.trashItem(at: URL(fileURLWithPath: item.path), resultingItemURL: nil)) == nil {
+                    failures[item.path] = "\(item.name) couldn't be moved"
+                }
+            }
+            return failures
+        }
+        let moved = items.filter { failures[$0.path] == nil }
+        let bytes = moved.reduce(0) { $0 + $1.bytes }
+        if var breakdown = snapshot.storageBreakdown, !moved.isEmpty {
+            breakdown.movedToBin(moved)
+            snapshot.storageBreakdown = breakdown
+            StorageBreakdownStore.save(breakdown)
+        }
+        var message = moved.isEmpty ? "" : "Moved \(moved.count == 1 ? moved[0].name : "\(moved.count) items") to the Bin. Empty the Bin to free \(Format.bytes(bytes))."
+        if !failures.isEmpty { message += (message.isEmpty ? "" : " ") + failures.values.sorted().joined(separator: ", ") + "." }
+        show(message)
+        await refresh(.storage)
+    }
+
+    /// Empties the Bin through Finder, as choosing Empty Bin there does. This can't be undone.
+    func emptyBin() async {
+        let result = await Shell.run("/usr/bin/osascript", ["-e", "tell application \"Finder\" to empty trash"], timeout: 600)
+        if result.succeeded {
+            if var breakdown = snapshot.storageBreakdown {
+                breakdown.emptiedBin()
+                snapshot.storageBreakdown = breakdown
+                StorageBreakdownStore.save(breakdown)
+            }
+            show("Emptied the Bin")
+        } else {
+            show("Couldn't empty the Bin. Allow DiagnoMac to control Finder in System Settings → Privacy & Security → Automation, or empty it in Finder.")
+        }
+        await refresh(.storage)
+    }
+
     /// Measures again when the Storage page opens, if the last breakdown is over an hour old.
     func refreshStorageBreakdownIfStale() {
         guard let last = snapshot.storageBreakdown, Date().timeIntervalSince(last.measuredAt) > 3600 else { return }

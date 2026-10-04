@@ -46,7 +46,9 @@ enum StorageBreakdownCollector {
                 }
             }
         }
-        return assemble(results, usage: usage, complete: true)
+        var breakdown = assemble(results, usage: usage, complete: true)
+        breakdown.suggestions = await suggestions(for: breakdown.categories)
+        return breakdown
     }
 
     private static func makeJobs() -> [Job] {
@@ -103,7 +105,8 @@ enum StorageBreakdownCollector {
             if path == root {
                 bytes = kilobytes * 1024
             } else if kilobytes >= 1024 {
-                items.append(StorageItem(name: name(path, job.naming), path: path, bytes: kilobytes * 1024))
+                items.append(StorageItem(name: name(path, job.naming), path: path, bytes: kilobytes * 1024,
+                                         canMoveToBin: canMoveToBin(path, job.kind)))
             }
         }
         // At a depth, du lists folders only (it won't combine -d with -a): add the files directly inside,
@@ -114,17 +117,113 @@ enum StorageBreakdownCollector {
             for file in files {
                 guard let values = try? file.resourceValues(forKeys: keys), values.isRegularFile == true,
                       let size = values.totalFileAllocatedSize, size >= 1_048_576 else { continue }
-                items.append(StorageItem(name: name(file.path, job.naming), path: file.path, bytes: UInt64(size)))
+                items.append(StorageItem(name: name(file.path, job.naming), path: file.path, bytes: UInt64(size),
+                                         canMoveToBin: canMoveToBin(file.path, job.kind)))
             }
         }
         if job.listed && bytes > 0 {
-            items = [StorageItem(name: name(root, .file), path: root, bytes: bytes)]
+            items = [StorageItem(name: name(root, .file), path: root, bytes: bytes, canMoveToBin: canMoveToBin(root, job.kind))]
         }
         // Only a category's own folder counts, not the odd protected folder elsewhere in the Library.
         let denied = !job.listed
             && result.stderr.split(separator: "\n").contains { $0.hasPrefix("du: \(root): ") && $0.contains("not permitted") }
         return Measured(job: job, bytes: bytes, items: items, denied: denied)
     }
+
+    /// Your own files and the apps you installed: nothing outside your home folder and Applications, no
+    /// libraries (Photos, Music, Mail, Messages, iCloud Drive), and none of Apple's apps.
+    private static func canMoveToBin(_ path: String, _ kind: StorageCategory.Kind) -> Bool {
+        let home = NSHomeDirectory()
+        guard path.hasPrefix(home + "/") || path.hasPrefix("/Applications/") else { return false }
+        guard ![.macOS, .systemData, .mail, .messages, .iCloudDrive].contains(kind) else { return false }
+        // Xcode's folder holds archives you need for crash reports; the Cleanup card clears its caches.
+        let kept = ["Library", "Music/Music", "Library/Developer/Xcode"].map { "\(home)/\($0)" }
+        guard !kept.contains(path), !path.hasSuffix(".photoslibrary") else { return false }
+        if path.hasSuffix(".app"), let id = Bundle(path: path)?.bundleIdentifier {
+            return !id.hasPrefix("com.apple.") && id != Bundle.main.bundleIdentifier
+        }
+        return true
+    }
+
+    // MARK: Suggestions
+
+    private static let sixMonths: TimeInterval = 182 * 86_400
+
+    /// Download caches that tools fill and fetch again, by folder name.
+    private static let toolCaches = [
+        ".cache": "Tools' download cache, like Hugging Face models and pip packages. They download what they need again.",
+        ".npm": "npm's package cache. It downloads packages again when needed.",
+        ".gradle": "Gradle's caches and downloads. Builds fetch them again when needed.",
+        ".m2": "Maven's package cache. Builds fetch packages again when needed.",
+        ".pub-cache": "Dart and Flutter's package cache. It downloads packages again when needed.",
+        ".cocoapods": "CocoaPods' cache. It downloads pods again when needed.",
+    ]
+
+    /// The big things in the breakdown that don't look used: apps not opened for six months, installers
+    /// left in Downloads, files and folders nothing has touched in six months, and tools' download caches.
+    private static func suggestions(for categories: [StorageCategory]) async -> [StorageSuggestion] {
+        let running = await MainActor.run { Set(NSWorkspace.shared.runningApplications.compactMap { $0.bundleURL?.path }) }
+        return await offMain {
+            var found: [StorageSuggestion] = []
+            for category in categories {
+                for item in category.items where item.canMoveToBin {
+                    guard let reason = reason(for: item, in: category.kind, running: running) else { continue }
+                    found.append(StorageSuggestion(item: item, kind: category.kind, reason: reason))
+                }
+            }
+            return found.sorted { $0.item.bytes > $1.item.bytes }
+        }
+    }
+
+    private static func reason(for item: StorageItem, in kind: StorageCategory.Kind, running: Set<String>) -> String? {
+        let url = URL(fileURLWithPath: item.path)
+        let now = Date()
+        let metadata = NSMetadataItem(url: url)
+        let lastUsed = metadata?.value(forAttribute: "kMDItemLastUsedDate") as? Date
+        let added = metadata?.value(forAttribute: "kMDItemDateAdded") as? Date
+        let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .isDirectoryKey, .isPackageKey])
+        let megabyte: UInt64 = 1_048_576
+
+        switch kind {
+        case .applications:
+            guard item.bytes >= 200 * megabyte, !running.contains(item.path) else { return nil }
+            if let lastUsed { return now.timeIntervalSince(lastUsed) > sixMonths ? "Not opened since \(monthYear(lastUsed))" : nil }
+            if let added, now.timeIntervalSince(added) > sixMonths { return "Not opened since you got it in \(monthYear(added))" }
+            return nil
+        case .developer:
+            guard item.bytes >= 1024 * megabyte else { return nil }
+            return toolCaches[url.lastPathComponent]
+        case .downloads, .desktop, .documents, .movies, .otherFiles:
+            let installer = ["dmg", "pkg", "xip", "iso"].contains(url.pathExtension.lowercased())
+            if kind == .downloads && installer && item.bytes >= 50 * megabyte {
+                let date = added ?? values?.contentModificationDate ?? now
+                guard now.timeIntervalSince(date) > 2 * 86_400 else { return nil }
+                return "An installer from \(date.formatted(.dateTime.day().month(.wide))). Once the app is installed, it isn't needed."
+            }
+            guard item.bytes >= 500 * megabyte else { return nil }
+            if values?.isDirectory == true && values?.isPackage != true {
+                return folderUnused(item.path) ? "Nothing in it opened or changed in the last 6 months" : nil
+            }
+            guard let latest = [lastUsed, values?.contentModificationDate].compactMap({ $0 }).max(),
+                  now.timeIntervalSince(latest) > sixMonths else { return nil }
+            return "Not opened or changed since \(monthYear(latest))"
+        default:
+            return nil
+        }
+    }
+
+    /// Spotlight has the folder's contents and none were opened or changed in six months. A folder it
+    /// doesn't index is never suggested.
+    private static func folderUnused(_ path: String) -> Bool {
+        func count(_ query: String) -> Int {
+            Int(Shell.runSync("/usr/bin/mdfind", ["-onlyin", path, "-count", query], timeout: 30)
+                .stdout.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+        }
+        guard count("kMDItemFSName == \"*\"") > 0 else { return false }
+        return count("kMDItemFSContentChangeDate >= $time.today(-182) || kMDItemLastUsedDate >= $time.today(-182)") == 0
+    }
+
+    private static func monthYear(_ date: Date) -> String { date.formatted(.dateTime.month(.wide).year()) }
 
     /// What the things inside are called in Finder, or for an app's container, the app's name.
     private static func name(_ path: String, _ naming: Job.Naming) -> String {

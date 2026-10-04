@@ -202,6 +202,12 @@ enum DiagnosticsDescriber {
                 let inside = category.items.prefix(3).map { "\($0.name) \(Format.gb($0.bytes))" }.joined(separator: ", ")
                 lines.append("- \(category.kind.title): \(Format.gb(category.bytes))\(inside.isEmpty ? "" : " (biggest: \(inside))")")
             }
+            if !breakdown.suggestions.isEmpty {
+                lines.append("Suggested for the Bin on DiagnoMac's Storage page, since they don't look used:")
+                for suggestion in breakdown.suggestions.prefix(5) {
+                    lines.append("- \(suggestion.item.name), \(Format.gb(suggestion.item.bytes)): \(suggestion.reason)")
+                }
+            }
         }
         if !st.cleanup.isEmpty {
             lines.append("Cleanup candidates:")
