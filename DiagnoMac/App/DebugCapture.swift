@@ -14,7 +14,7 @@ import SwiftUI
 ///   -capturePowerHistory      fill the Battery page's power chart with made-up readings, with a gap
 ///   -captureMenuBarPanel      capture the menu bar panel's contents as menubar.png
 ///   -captureStorageBreakdown  measure what's using the disk first, and wait for it
-///   -captureTall              make the window 2,400 points tall first, to capture long pages whole
+///   -browseStorage <category> [-browseFolder <path>]   open the Storage page's browser there
 @MainActor
 enum DebugCapture {
     private static let args = ProcessInfo.processInfo.arguments
@@ -27,8 +27,56 @@ enum DebugCapture {
     static var outputDirectory: URL? { value("-captureScreens").map { URL(fileURLWithPath: $0, isDirectory: true) } }
 
     static func runIfRequested(model: AppModel) {
+        // `-checkBinRules <file>`: which sample paths can go to the Bin, written to the file, then quit.
+        if let path = value("-checkBinRules") {
+            let home = NSHomeDirectory()
+            typealias Sample = (path: String, kind: StorageCategory.Kind)
+            let inHome: [Sample] = [
+                ("Library/Keychains", .appData), ("Library/Preferences/com.example.plist", .appData),
+                ("Library/Caches", .appData), ("Library/Caches/com.spotify.client", .appData),
+                ("Library/Application Support/Claude", .appData), ("Library/Application Support/AddressBook", .appData),
+                ("Library/Group Containers/group.com.apple.notes", .appData), ("Library/Containers/com.docker.docker", .appData),
+                ("Library/Developer/Xcode", .developer), ("Library/Developer/Xcode/Archives", .developer),
+                ("Library/Developer/Xcode/DerivedData", .developer), ("Library/Developer/CoreSimulator", .developer),
+                (".ssh", .developer), (".ssh/id_ed25519", .developer), (".zshrc", .developer),
+                (".cache", .developer), (".cache/huggingface", .developer),
+                ("Models", .otherFiles), ("Models/Qwen3.8-Flash-Next-FP8", .otherFiles),
+                ("Music/Music", .music), ("Music/Music/Media.localized", .music),
+                ("Pictures/Photos Library.photoslibrary", .photos), ("Downloads/pycharm-2026.2.3-aarch64.dmg", .downloads),
+            ]
+            let elsewhere: [Sample] = [
+                ("/Applications/Xcode.app", .applications), ("/Applications/Safari.app", .applications),
+                ("/Applications/Utilities", .applications), ("/Library/Developer/CommandLineTools", .developer),
+            ]
+            var samples: [Sample] = []
+            for sample in inHome { samples.append((home + "/" + sample.path, sample.kind)) }
+            samples += elsewhere
+            var out: [String] = []
+            for sample in samples {
+                let verdict = StorageBreakdownCollector.debugCanMoveToBin(sample.path, sample.kind) ? "CAN GO " : "LOCKED "
+                out.append(verdict + " " + sample.path.replacingOccurrences(of: home, with: "~"))
+            }
+            try? out.joined(separator: "\n").write(toFile: path, atomically: true, encoding: .utf8)
+            exit(0)  // Still launching, so NSApp.terminate wouldn't take yet.
+        }
         // `-showUpdateFound <version>`: the sidebar's update button as if a check had found that version.
         if let version = value("-showUpdateFound") { model.updates.debugFound(version) }
+        // `-captureNow <png>`: after -captureDelay seconds (8 by default), save the window as it is, then quit.
+        // Quicker than -captureScreens when one page is enough, like the Storage browser with -browseStorage.
+        if let file = value("-captureNow") {
+            Task {
+                try? await Task.sleep(for: .seconds(value("-captureDelay").flatMap(Double.init) ?? 8))
+                capture(to: URL(fileURLWithPath: file))
+                if !FileManager.default.fileExists(atPath: file) {
+                    // Say why there's no picture.
+                    let main = NSApp.windows.first { $0.identifier?.rawValue == AppDelegate.mainWindowID }
+                    let note = "main window: " + (main.map { "visible=\($0.isVisible) \(Int($0.frame.width))x\(Int($0.frame.height))" } ?? "none")
+                    try? note.write(toFile: file + ".txt", atomically: true, encoding: .utf8)
+                }
+                NSApp.terminate(nil)
+            }
+            return
+        }
         // `-dumpWindows <file>`: after 6 seconds, write the windows and activation policy, then quit.
         if let path = value("-dumpWindows") {
             Task {
@@ -97,11 +145,6 @@ enum DebugCapture {
                 if let group = model.snapshot.logs?.groups(since: Date().addingTimeInterval(-7 * 86_400)).first {
                     model.explain(group)
                 }
-            }
-
-            if args.contains("-captureTall"),
-               let window = NSApp.windows.first(where: { $0.identifier?.rawValue == AppDelegate.mainWindowID }) {
-                window.setFrame(NSRect(x: window.frame.minX, y: 0, width: window.frame.width, height: 2400), display: true)
             }
 
             if args.contains("-captureStorageBreakdown") {

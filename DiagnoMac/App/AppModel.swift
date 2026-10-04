@@ -483,7 +483,9 @@ final class AppModel {
     }
 
     /// Moves things from the breakdown to the Bin, where they can be put back until it's emptied.
-    func moveToBin(_ items: [StorageItem]) async {
+    /// Returns the ones that moved.
+    @discardableResult
+    func moveToBin(_ items: [StorageItem]) async -> [StorageItem] {
         // An app that's open is skipped: moving it while it runs leaves it half there.
         let open = Set(NSWorkspace.shared.runningApplications.compactMap { $0.bundleURL?.path })
         // Why each one that didn't move stayed, by path.
@@ -509,6 +511,7 @@ final class AppModel {
         if !failures.isEmpty { message += (message.isEmpty ? "" : " ") + failures.values.sorted().joined(separator: ", ") + "." }
         show(message)
         await refresh(.storage)
+        return moved
     }
 
     /// Empties the Bin through Finder, as choosing Empty Bin there does. This can't be undone.
