@@ -196,6 +196,19 @@ enum DiagnosticsDescriber {
         let free = st.totalBytes > 0 ? Double(st.availableBytes) / Double(st.totalBytes) : 1
         let room = free >= 0.2 ? "plenty of room" : free >= 0.1 ? "getting full" : "nearly full, which can slow the Mac down"
         var lines = ["The disk holds \(Format.gb(st.totalBytes)) and has \(Format.gb(st.availableBytes)) free: \(room). Drive SMART status \(st.smartStatus ?? "unknown")."]
+        if let breakdown = s.storageBreakdown, breakdown.isComplete {
+            lines.append("What's using space, measured \(Format.relative(breakdown.measuredAt)):")
+            for category in breakdown.categories.prefix(8) {
+                let inside = category.items.prefix(3).map { "\($0.name) \(Format.gb($0.bytes))" }.joined(separator: ", ")
+                lines.append("- \(category.kind.title): \(Format.gb(category.bytes))\(inside.isEmpty ? "" : " (biggest: \(inside))")")
+            }
+            if !breakdown.suggestions.isEmpty {
+                lines.append("Suggested for the Bin on DiagnoMac's Storage page, since they don't look used:")
+                for suggestion in breakdown.suggestions.prefix(5) {
+                    lines.append("- \(suggestion.item.name), \(Format.gb(suggestion.item.bytes)): \(suggestion.reason)")
+                }
+            }
+        }
         if !st.cleanup.isEmpty {
             lines.append("Cleanup candidates:")
             for c in st.cleanup.prefix(6) { lines.append("- \(c.title): \(c.bytes.map { Format.gb($0) } ?? "?"). \(c.explanation)") }

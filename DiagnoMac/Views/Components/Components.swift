@@ -158,6 +158,7 @@ struct SegmentBar: View {
 
     let segments: [Segment]
     var height: CGFloat = 16
+    var showsLegend = true
 
     var body: some View {
         let total = max(segments.map(\.value).reduce(0, +), 1)
@@ -173,7 +174,7 @@ struct SegmentBar: View {
             .frame(height: height)
             .clipShape(RoundedRectangle(cornerRadius: 4))
 
-            FlowLegend(segments: segments)
+            if showsLegend { FlowLegend(segments: segments) }
         }
     }
 }
