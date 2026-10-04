@@ -45,7 +45,7 @@ The `.xcodeproj` is generated from `project.yml` and is not checked in.
 | CPU & GPU | `host_processor_info` (per-core, every second), `getloadavg`, `ps`, thermal state; IOAccelerator `PerformanceStatistics` and per-app `accumulatedGPUTime` |
 | Memory | `host_statistics64`, `vm.swapusage`, `kern.memorystatus_*` |
 | Running apps | `NSWorkspace.runningApplications`, `proc_pid_rusage` (physical footprint and CPU time, including helper processes) |
-| Storage & backups | URL volume resource values, `diskutil info disk0` (SMART), folder sizes, `tmutil` |
+| Storage & backups | URL volume resource values, `diskutil info disk0` (SMART), `du` per folder for the breakdown, `diskutil apfs list` (macOS's volumes), `tmutil` |
 | Network | `NWPathMonitor`, CoreWLAN, `ping`, `getaddrinfo`, `networkQuality` (run under a pseudo-terminal for live progress) |
 | Security | `fdesetup`, `csrutil`, `spctl`, `socketfilterfw`, XProtect bundle, `profiles` |
 | Startup items | LaunchAgents / LaunchDaemons plists, `launchctl list` / `print-disabled` |

@@ -17,14 +17,16 @@ enum Shell {
         var succeeded: Bool { status == 0 }
     }
 
-    static func run(_ path: String, _ args: [String] = [], timeout: TimeInterval = 20) async -> Result {
-        await offMain { runSync(path, args, timeout: timeout) }
+    static func run(_ path: String, _ args: [String] = [], timeout: TimeInterval = 20,
+                    qos: QualityOfService = .default) async -> Result {
+        await offMain { runSync(path, args, timeout: timeout, qos: qos) }
     }
 
-    static func runSync(_ path: String, _ args: [String], timeout: TimeInterval) -> Result {
+    static func runSync(_ path: String, _ args: [String], timeout: TimeInterval, qos: QualityOfService = .default) -> Result {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
         process.arguments = args
+        process.qualityOfService = qos
         let out = Pipe(), err = Pipe()
         process.standardOutput = out
         process.standardError = err

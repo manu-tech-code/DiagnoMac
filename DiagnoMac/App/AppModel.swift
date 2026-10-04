@@ -63,6 +63,7 @@ final class AppModel {
             selection = area
         }
         intelligence.context = { [unowned self] in (self.snapshot.value, self.findings) }
+        snapshot.storageBreakdown = StorageBreakdownStore.load()
         // Plugging in or unplugging the charger is reported straight away, without polling.
         powerSourceObserver = PowerSourceObserver { [weak self] in
             Task { await self?.sampleBattery() }
@@ -449,6 +450,87 @@ final class AppModel {
         for candidate in candidates { messages.append(await StorageCollector.clean(candidate)) }
         show(messages.joined(separator: " "))
         await refresh(.storage)
+        if snapshot.storageBreakdown != nil { measureStorage() }
+    }
+
+    // MARK: Storage breakdown
+
+    struct StorageProgress: Equatable {
+        var done: Int
+        var total: Int
+    }
+
+    /// How far the storage breakdown has got, while it's being measured.
+    private(set) var storageProgress: StorageProgress?
+
+    /// Measures what's using the disk. The first time, macOS may ask to let DiagnoMac read some folders.
+    func measureStorage() {
+        guard storageProgress == nil else { return }
+        storageProgress = StorageProgress(done: 0, total: 0)
+        // The first time, folders fill in as they're measured. After that the last breakdown stays up
+        // until the new one is ready, rather than every row dropping to zero and growing back.
+        let showPartial = snapshot.storageBreakdown == nil
+        Task {
+            let breakdown = await StorageBreakdownCollector.measure { [weak self] partial, done, total in
+                guard let self else { return }
+                if showPartial { snapshot.storageBreakdown = partial }
+                storageProgress = StorageProgress(done: done, total: total)
+            }
+            snapshot.storageBreakdown = breakdown
+            storageProgress = nil
+            StorageBreakdownStore.save(breakdown)
+        }
+    }
+
+    /// Moves things from the breakdown to the Bin, where they can be put back until it's emptied.
+    func moveToBin(_ items: [StorageItem]) async {
+        // An app that's open is skipped: moving it while it runs leaves it half there.
+        let open = Set(NSWorkspace.shared.runningApplications.compactMap { $0.bundleURL?.path })
+        // Why each one that didn't move stayed, by path.
+        let failures: [String: String] = await offMain {
+            var failures: [String: String] = [:]
+            for item in items {
+                if open.contains(item.path) {
+                    failures[item.path] = "\(item.name) is open"
+                } else if (try? FileManager.default.trashItem(at: URL(fileURLWithPath: item.path), resultingItemURL: nil)) == nil {
+                    failures[item.path] = "\(item.name) couldn't be moved"
+                }
+            }
+            return failures
+        }
+        let moved = items.filter { failures[$0.path] == nil }
+        let bytes = moved.reduce(0) { $0 + $1.bytes }
+        if var breakdown = snapshot.storageBreakdown, !moved.isEmpty {
+            breakdown.movedToBin(moved)
+            snapshot.storageBreakdown = breakdown
+            StorageBreakdownStore.save(breakdown)
+        }
+        var message = moved.isEmpty ? "" : "Moved \(moved.count == 1 ? moved[0].name : "\(moved.count) items") to the Bin. Empty the Bin to free \(Format.bytes(bytes))."
+        if !failures.isEmpty { message += (message.isEmpty ? "" : " ") + failures.values.sorted().joined(separator: ", ") + "." }
+        show(message)
+        await refresh(.storage)
+    }
+
+    /// Empties the Bin through Finder, as choosing Empty Bin there does. This can't be undone.
+    func emptyBin() async {
+        let result = await Shell.run("/usr/bin/osascript", ["-e", "tell application \"Finder\" to empty trash"], timeout: 600)
+        if result.succeeded {
+            if var breakdown = snapshot.storageBreakdown {
+                breakdown.emptiedBin()
+                snapshot.storageBreakdown = breakdown
+                StorageBreakdownStore.save(breakdown)
+            }
+            show("Emptied the Bin")
+        } else {
+            show("Couldn't empty the Bin. Allow DiagnoMac to control Finder in System Settings → Privacy & Security → Automation, or empty it in Finder.")
+        }
+        await refresh(.storage)
+    }
+
+    /// Measures again when the Storage page opens, if the last breakdown is over an hour old.
+    func refreshStorageBreakdownIfStale() {
+        guard let last = snapshot.storageBreakdown, Date().timeIntervalSince(last.measuredAt) > 3600 else { return }
+        measureStorage()
     }
 
     func setStartupItem(_ item: StartupItem, enabled: Bool) async {

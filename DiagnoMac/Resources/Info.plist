@@ -17,15 +17,15 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.2.3</string>
+	<string>0.2.4</string>
 	<key>CFBundleVersion</key>
-	<string>5</string>
+	<string>6</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.utilities</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>15.0</string>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>DiagnoMac asks macOS to show its restart dialog when you choose Restart on the Memory page.</string>
+	<string>DiagnoMac asks macOS to show its restart dialog when you choose Restart on the Memory page, and asks Finder to empty the Bin when you choose Empty Bin on the Storage page.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>DiagnoMac shows a live preview so you can check that your camera works. Video never leaves your Mac.</string>
 	<key>NSHumanReadableCopyright</key>

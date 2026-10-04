@@ -18,6 +18,8 @@ struct DiagnosticsSnapshot: Sendable {
     var apps: [RunningApp]?
     var backup: BackupInfo?
     var devices: DevicesInfo?
+    /// Measured on request, not by the scan.
+    var storageBreakdown: StorageBreakdown?
     var takenAt = Date()
 }
 
@@ -41,13 +43,15 @@ final class LiveSnapshot {
     var apps: [RunningApp]?
     var backup: BackupInfo?
     var devices: DevicesInfo?
+    var storageBreakdown: StorageBreakdown?
     var takenAt = Date()
 
     /// A copy for the findings engine, the report and the on-device model.
     var value: DiagnosticsSnapshot {
         DiagnosticsSnapshot(machine: machine, battery: battery, hasBattery: hasBattery, power: power, performance: performance,
                             memory: memory, storage: storage, network: network, security: security, startup: startup,
-                            logs: logs, gpu: gpu, apps: apps, backup: backup, devices: devices, takenAt: takenAt)
+                            logs: logs, gpu: gpu, apps: apps, backup: backup, devices: devices,
+                            storageBreakdown: storageBreakdown, takenAt: takenAt)
     }
 }
 

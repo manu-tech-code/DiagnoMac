@@ -39,13 +39,13 @@ targets:
       path: DiagnoMac/Resources/Info.plist
       properties:
         CFBundleDisplayName: DiagnoMac
-        CFBundleShortVersionString: "0.2.3"
-        CFBundleVersion: "5"
+        CFBundleShortVersionString: "0.2.4"
+        CFBundleVersion: "6"
         LSApplicationCategoryType: public.app-category.utilities
         LSMinimumSystemVersion: "15.0"
         NSHumanReadableCopyright: "© 2026 Emmanuel Larbi"
         NSCameraUsageDescription: "DiagnoMac shows a live preview so you can check that your camera works. Video never leaves your Mac."
-        NSAppleEventsUsageDescription: "DiagnoMac asks macOS to show its restart dialog when you choose Restart on the Memory page."
+        NSAppleEventsUsageDescription: "DiagnoMac asks macOS to show its restart dialog when you choose Restart on the Memory page, and asks Finder to empty the Bin when you choose Empty Bin on the Storage page."
         NSMicrophoneUsageDescription: "DiagnoMac shows an input level meter so you can check that your microphone works. Audio is never recorded or sent anywhere."
         # Sparkle: the appcast attached to the latest GitHub release, checked daily.
         # SUPublicEDKey is the public half of the update key in the login Keychain
