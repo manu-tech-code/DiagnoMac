@@ -470,11 +470,11 @@ final class AppModel {
         // The first time, folders fill in as they're measured. After that the last breakdown stays up
         // until the new one is ready, rather than every row dropping to zero and growing back.
         let showPartial = snapshot.storageBreakdown == nil
+        // The model lives as long as the app, so the task can hold on to it.
         Task {
-            let breakdown = await StorageBreakdownCollector.measure { [weak self] partial, done, total in
-                guard let self else { return }
-                if showPartial { snapshot.storageBreakdown = partial }
-                storageProgress = StorageProgress(done: done, total: total)
+            let breakdown = await StorageBreakdownCollector.measure { partial, done, total in
+                if showPartial { self.snapshot.storageBreakdown = partial }
+                self.storageProgress = StorageProgress(done: done, total: total)
             }
             snapshot.storageBreakdown = breakdown
             storageProgress = nil
@@ -483,7 +483,9 @@ final class AppModel {
     }
 
     /// Moves things from the breakdown to the Bin, where they can be put back until it's emptied.
-    func moveToBin(_ items: [StorageItem]) async {
+    /// Returns the ones that moved.
+    @discardableResult
+    func moveToBin(_ items: [StorageItem]) async -> [StorageItem] {
         // An app that's open is skipped: moving it while it runs leaves it half there.
         let open = Set(NSWorkspace.shared.runningApplications.compactMap { $0.bundleURL?.path })
         // Why each one that didn't move stayed, by path.
@@ -509,6 +511,7 @@ final class AppModel {
         if !failures.isEmpty { message += (message.isEmpty ? "" : " ") + failures.values.sorted().joined(separator: ", ") + "." }
         show(message)
         await refresh(.storage)
+        return moved
     }
 
     /// Empties the Bin through Finder, as choosing Empty Bin there does. This can't be undone.

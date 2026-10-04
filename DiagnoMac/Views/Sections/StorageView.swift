@@ -5,7 +5,7 @@ struct StorageView: View {
     @State private var selected: Set<String> = []
     @State private var confirming = false
     @State private var cleaning = false
-    @State private var expanded: Set<StorageCategory.Kind> = []
+    @State private var browser = StorageBrowser()
     @State private var selectedSuggestions: Set<String> = []
     /// What the Move to Bin confirmation is asking about.
     @State private var pendingBin: [StorageItem]?
@@ -45,7 +45,7 @@ struct StorageView: View {
                             titleVisibility: .visible, presenting: pendingBin) { items in
             Button("Move to Bin", role: .destructive) {
                 selectedSuggestions.subtract(items.map(\.path))
-                Task { await model.moveToBin(items) }
+                Task { browser.moved(await model.moveToBin(items)) }
             }
             Button("Cancel", role: .cancel) {}
         } message: { items in
@@ -60,8 +60,22 @@ struct StorageView: View {
         .onAppear {
             model.refreshStorageBreakdownIfStale()
             #if DEBUG
-            // `-expandStorage`: every category open, for screenshots.
-            if ProcessInfo.processInfo.arguments.contains("-expandStorage") { expanded = Set(StorageCategory.Kind.allCases) }
+            // `-browseStorage <category> [-browseFolder <path>]`: open the browser there, for screenshots.
+            let args = ProcessInfo.processInfo.arguments
+            func value(_ flag: String) -> String? { args.firstIndex(of: flag).flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil } }
+            if let kind = value("-browseStorage").flatMap(StorageCategory.Kind.init(rawValue:)) {
+                browser.open(kind)
+                let children = model.snapshot.storageBreakdown?.categories.first { $0.kind == kind }?.children ?? []
+                // Opens each folder on the way down to the path.
+                if let path = value("-browseFolder"), let top = children.first(where: { $0.holds(StorageItem(name: "", path: path, bytes: 0)) }) {
+                    browser.open(top)
+                    var current = top.path
+                    for part in path.dropFirst(top.path.count).split(separator: "/") {
+                        current += "/" + part
+                        browser.open(StorageItem(name: String(part), path: current, bytes: 0, isFolder: true))
+                    }
+                }
+            }
             #endif
         }
     }
@@ -80,13 +94,17 @@ struct StorageView: View {
                 height: 20, showsLegend: false)
                 .animation(.smooth(duration: 0.5), value: breakdown.categories.map(\.bytes))
 
-                VStack(spacing: 0) {
-                    ForEach(breakdown.categories) { category in
-                        Divider()
-                        categoryRow(category, used: st.usedBytes)
+                if browser.isBrowsing {
+                    browserView(breakdown)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(breakdown.categories) { category in
+                            Divider()
+                            categoryRow(category, used: st.usedBytes)
+                        }
                     }
+                    if !breakdown.needsAccess.isEmpty { accessNote(breakdown.needsAccess) }
                 }
-                if !breakdown.needsAccess.isEmpty { accessNote(breakdown.needsAccess) }
             } else {
                 SegmentBar(segments: [
                     .init(label: "Used", value: max(0, Double(st.usedBytes) - Double(st.reclaimableBytes)), color: .accentColor, detail: Format.gb(st.usedBytes)),
@@ -109,68 +127,170 @@ struct StorageView: View {
     }
 
     private func categoryRow(_ category: StorageCategory, used: UInt64) -> some View {
-        let isOpen = expanded.contains(category.kind)
-        return VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 10) {
-                Button {
-                    guard !category.items.isEmpty else { return }
-                    withAnimation(.smooth(duration: 0.35)) {
-                        if isOpen { expanded.remove(category.kind) } else { expanded.insert(category.kind) }
+        HStack(spacing: 10) {
+            Button {
+                guard !category.children.isEmpty else { return }
+                withAnimation(.smooth(duration: 0.3)) { browser.open(category.kind) }
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: category.kind.systemImage)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 26, height: 26)
+                        .background(category.kind.color.gradient, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(category.kind.title).fontWeight(.medium)
+                        Text(category.kind.detail).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     }
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: category.kind.systemImage)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 26, height: 26)
-                            .background(category.kind.color.gradient, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(category.kind.title).fontWeight(.medium)
-                            Text(category.kind.detail).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                        }
-                        Spacer(minLength: 12)
-                        ShareBar(fraction: Double(category.bytes) / Double(max(used, 1)), color: category.kind.color)
-                            .frame(width: 80, height: 6)
-                        Text(Format.bytes(category.bytes)).monospacedDigit().frame(minWidth: 72, alignment: .trailing)
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.tertiary)
-                            .rotationEffect(.degrees(isOpen ? 90 : 0))
-                            .opacity(category.items.isEmpty ? 0 : 1)
-                    }
-                    .padding(.vertical, 8)
-                    .contentShape(Rectangle())
+                    Spacer(minLength: 12)
+                    ShareBar(fraction: Double(category.bytes) / Double(max(used, 1)), color: category.kind.color)
+                        .frame(width: 80, height: 6)
+                    Text(Format.bytes(category.bytes)).monospacedDigit().frame(minWidth: 72, alignment: .trailing)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .opacity(category.children.isEmpty ? 0 : 1)
                 }
-                .buttonStyle(.plain)
-                if category.kind == .bin {
-                    Button("Empty Bin…") { confirmingEmptyBin = true }.controlSize(.small)
-                }
+                .padding(.vertical, 8)
+                .contentShape(Rectangle())
             }
-
-            if isOpen {
-                VStack(spacing: 0) {
-                    ForEach(category.items) { item in itemRow(item) }
-                }
-                .padding(.leading, 38)
-                .padding(.bottom, 8)
-                .transition(.opacity.combined(with: .move(edge: .top)))
+            .buttonStyle(.plain)
+            if category.kind == .bin {
+                Button("Empty Bin…") { confirmingEmptyBin = true }.controlSize(.small)
             }
         }
     }
 
-    private func itemRow(_ item: StorageItem) -> some View {
-        HStack(spacing: 8) {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: item.path))
-                .resizable()
-                .frame(width: 18, height: 18)
-            VStack(alignment: .leading, spacing: 0) {
-                Text(item.name).lineLimit(1).truncationMode(.middle)
-                // Where it is, since two things can share a name (CoreSimulator is in both Libraries).
-                Text(Self.location(of: item))
-                    .font(.caption2).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.middle)
+    // MARK: Browser
+
+    private func browserView(_ breakdown: StorageBreakdown) -> some View {
+        let kind = browser.category ?? .otherFiles
+        let items = browser.items(in: breakdown)
+        let total = items?.reduce(0) { $0 + $1.bytes } ?? 0
+        let selectable = (items ?? []).filter { $0.canMoveToBin && !browser.isCovered($0) }
+        let bindings = selectable.map { item in
+            Binding(get: { browser.ticked[item.path] != nil }, set: { browser.setTicked(item, $0) })
+        }
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Button { withAnimation(.smooth(duration: 0.3)) { browser.back() } } label: {
+                    Image(systemName: "chevron.left").frame(width: 16)
+                }
+                .help(browser.folders.isEmpty ? "All categories" : "Back")
+                breadcrumb(kind)
+                Spacer(minLength: 12)
+                Text(Format.bytes(total)).monospacedDigit().foregroundStyle(.secondary)
             }
-            Spacer()
-            Text(Format.bytes(item.bytes)).monospacedDigit().foregroundStyle(.secondary)
+
+            HStack(spacing: 10) {
+                Toggle(sources: bindings, isOn: \.self) {
+                    Text(!selectable.isEmpty && selectable.allSatisfy { browser.ticked[$0.path] != nil } ? "Deselect all" : "Select all")
+                        .fontWeight(.medium)
+                }
+                .toggleStyle(.checkbox)
+                .disabled(selectable.isEmpty)
+                Text(browser.ticked.isEmpty ? "Tick what you want to remove, in any folder"
+                     : "\(browser.ticked.count) selected · \(Format.bytes(browser.selectedBytes))")
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if !browser.ticked.isEmpty {
+                    Button("Clear") { browser.clearTicks() }
+                }
+                Button("Move to Bin…") { pendingBin = browser.selection }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(browser.ticked.isEmpty)
+            }
+
+            if let items {
+                VStack(spacing: 0) {
+                    ForEach(items) { item in
+                        Divider()
+                        browserRow(item, total: total, color: kind.color)
+                    }
+                }
+                if items.isEmpty {
+                    Text("Nothing in here takes up space.").foregroundStyle(.secondary).padding(.vertical, 8)
+                } else if items.count >= StorageBreakdownCollector.listLimit {
+                    Text("Showing the \(items.count) largest. Smaller ones are left out.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            } else {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Measuring \(browser.folders.last?.name ?? "the folder")…").foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 12)
+            }
+        }
+    }
+
+    /// The category, then the folders opened in it. Deep paths show only the last two folders.
+    private func breadcrumb(_ kind: StorageCategory.Kind) -> some View {
+        let shown = Array(browser.folders.enumerated()).suffix(2)
+        return HStack(spacing: 5) {
+            crumb(kind.title, depth: 0)
+            if browser.folders.count > 2 {
+                Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
+                Text("…").foregroundStyle(.secondary)
+            }
+            ForEach(shown, id: \.element.path) { index, folder in
+                Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
+                crumb(folder.name, depth: index + 1)
+            }
+        }
+        .lineLimit(1)
+    }
+
+    @ViewBuilder
+    private func crumb(_ title: String, depth: Int) -> some View {
+        if depth == browser.folders.count {
+            Text(title).fontWeight(.semibold).truncationMode(.middle)
+        } else {
+            Button(title) { withAnimation(.smooth(duration: 0.3)) { browser.goUp(to: depth) } }
+                .buttonStyle(.link)
+                .truncationMode(.middle)
+        }
+    }
+
+    private func browserRow(_ item: StorageItem, total: UInt64, color: Color) -> some View {
+        let covered = browser.isCovered(item)
+        return HStack(spacing: 10) {
+            if item.canMoveToBin {
+                Toggle("", isOn: Binding(get: { browser.isTicked(item) }, set: { browser.setTicked(item, $0) }))
+                    .toggleStyle(.checkbox)
+                    .labelsHidden()
+                    .disabled(covered)
+            } else {
+                Image(systemName: "lock.fill")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 14)
+                    .help("Protected: DiagnoMac doesn't remove this")
+            }
+            Button {
+                if item.isFolder { withAnimation(.smooth(duration: 0.3)) { browser.open(item) } }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(nsImage: NSWorkspace.shared.icon(forFile: item.path))
+                        .resizable()
+                        .frame(width: 20, height: 20)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(item.name).lineLimit(1).truncationMode(.middle)
+                        Text(covered ? "Goes with the folder you ticked" : !item.canMoveToBin ? "Protected" : item.isFolder ? "Folder" : "File")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 12)
+                    ShareBar(fraction: Double(item.bytes) / Double(max(total, 1)), color: color)
+                        .frame(width: 70, height: 6)
+                    Text(Format.bytes(item.bytes)).monospacedDigit().frame(minWidth: 72, alignment: .trailing)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .opacity(item.isFolder ? 1 : 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
             Button {
                 NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: item.path)])
             } label: {
@@ -178,13 +298,8 @@ struct StorageView: View {
             }
             .buttonStyle(.borderless)
             .help("Show in Finder")
-            Button { pendingBin = [item] } label: { Image(systemName: "trash") }
-                .buttonStyle(.borderless)
-                .help("Move to Bin…")
-                .opacity(item.canMoveToBin ? 1 : 0)
-                .disabled(!item.canMoveToBin)
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, 5)
     }
 
     // MARK: Suggestions

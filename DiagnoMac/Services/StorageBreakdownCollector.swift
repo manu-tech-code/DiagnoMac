@@ -18,10 +18,14 @@ enum StorageBreakdownCollector {
     private struct Measured: Sendable {
         let job: Job
         let bytes: UInt64
-        let items: [StorageItem]
+        /// What's directly inside, or for a folder measured as a whole, the folder itself.
+        let children: [StorageItem]
         /// macOS refused to let DiagnoMac read the folder itself.
         let denied: Bool
     }
+
+    /// The most a category or folder lists; past that, the smallest are left out.
+    static let listLimit = 300
 
     /// Calls `update` with the categories so far after each folder, then returns the full breakdown.
     static func measure(update: @escaping @MainActor (StorageBreakdown, _ done: Int, _ total: Int) -> Void) async -> StorageBreakdown {
@@ -94,56 +98,112 @@ enum StorageBreakdownCollector {
     }
 
     private static func run(_ job: Job) async -> Measured {
-        let result = await Shell.run("/usr/bin/du", ["-k", "-d", "\(job.depth)", job.url.path], timeout: 900, qos: .utility)
-        let root = job.url.path
+        let listing = await list(job.url, depth: job.depth, kind: job.kind, naming: job.naming)
+        var children = listing.children
+        if job.listed && listing.bytes > 0 {
+            children = [item(job.url.path, bytes: listing.bytes, kind: job.kind, naming: .file)]
+        }
+        return Measured(job: job, bytes: listing.bytes, children: children, denied: listing.denied && !job.listed)
+    }
+
+    /// What's directly inside a folder, largest first, measured when you open it in the Storage page.
+    static func contents(of folder: StorageItem, kind: StorageCategory.Kind) async -> [StorageItem] {
+        await list(URL(fileURLWithPath: folder.path), depth: 1, kind: kind, naming: .file).children
+    }
+
+    /// A folder's size, and with `depth` 1 the size of each folder and file directly inside.
+    private static func list(_ url: URL, depth: Int, kind: StorageCategory.Kind, naming: Job.Naming)
+        async -> (bytes: UInt64, children: [StorageItem], denied: Bool) {
+        let result = await Shell.run("/usr/bin/du", ["-k", "-d", "\(depth)", url.path], timeout: 900, qos: .utility)
+        let root = url.path
         var bytes: UInt64 = 0
-        var items: [StorageItem] = []
+        var children: [StorageItem] = []
         for line in result.stdout.split(separator: "\n") {
             let parts = line.split(separator: "\t", maxSplits: 1)
             guard parts.count == 2, let kilobytes = UInt64(parts[0]) else { continue }
             let path = String(parts[1])
             if path == root {
                 bytes = kilobytes * 1024
-            } else if kilobytes >= 1024 {
-                items.append(StorageItem(name: name(path, job.naming), path: path, bytes: kilobytes * 1024,
-                                         canMoveToBin: canMoveToBin(path, job.kind)))
+            } else {
+                children.append(item(path, bytes: kilobytes * 1024, kind: kind, naming: naming))
             }
         }
-        // At a depth, du lists folders only (it won't combine -d with -a): add the files directly inside,
-        // like a big disk image in Downloads.
-        if job.depth > 0 {
+        // At a depth, du lists folders only (it won't combine -d with -a): add the files directly inside.
+        if depth > 0 {
             let keys: Set<URLResourceKey> = [.isRegularFileKey, .totalFileAllocatedSizeKey]
-            let files = (try? FileManager.default.contentsOfDirectory(at: job.url, includingPropertiesForKeys: Array(keys))) ?? []
+            let files = (try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: Array(keys))) ?? []
             for file in files {
-                guard let values = try? file.resourceValues(forKeys: keys), values.isRegularFile == true,
-                      let size = values.totalFileAllocatedSize, size >= 1_048_576 else { continue }
-                items.append(StorageItem(name: name(file.path, job.naming), path: file.path, bytes: UInt64(size),
-                                         canMoveToBin: canMoveToBin(file.path, job.kind)))
+                guard let values = try? file.resourceValues(forKeys: keys), values.isRegularFile == true else { continue }
+                children.append(item(file.path, bytes: UInt64(values.totalFileAllocatedSize ?? 0), kind: kind, naming: naming))
             }
         }
-        if job.listed && bytes > 0 {
-            items = [StorageItem(name: name(root, .file), path: root, bytes: bytes, canMoveToBin: canMoveToBin(root, job.kind))]
-        }
-        // Only a category's own folder counts, not the odd protected folder elsewhere in the Library.
-        let denied = !job.listed
-            && result.stderr.split(separator: "\n").contains { $0.hasPrefix("du: \(root): ") && $0.contains("not permitted") }
-        return Measured(job: job, bytes: bytes, items: items, denied: denied)
+        // Only a category's own folder counts, not the odd protected folder inside it.
+        let denied = result.stderr.split(separator: "\n").contains { $0.hasPrefix("du: \(root): ") && $0.contains("not permitted") }
+        children.sort { $0.bytes > $1.bytes }
+        return (bytes, Array(children.prefix(listLimit)), denied)
     }
 
-    /// Your own files and the apps you installed: nothing outside your home folder and Applications, no
-    /// libraries (Photos, Music, Mail, Messages, iCloud Drive), and none of Apple's apps.
-    private static func canMoveToBin(_ path: String, _ kind: StorageCategory.Kind) -> Bool {
-        let home = NSHomeDirectory()
-        guard path.hasPrefix(home + "/") || path.hasPrefix("/Applications/") else { return false }
-        guard ![.macOS, .systemData, .mail, .messages, .iCloudDrive].contains(kind) else { return false }
-        // Xcode's folder holds archives you need for crash reports; the Cleanup card clears its caches.
-        let kept = ["Library", "Music/Music", "Library/Developer/Xcode"].map { "\(home)/\($0)" }
-        guard !kept.contains(path), !path.hasSuffix(".photoslibrary") else { return false }
-        if path.hasSuffix(".app"), let id = Bundle(path: path)?.bundleIdentifier {
-            return !id.hasPrefix("com.apple.") && id != Bundle.main.bundleIdentifier
-        }
-        return true
+    private static func item(_ path: String, bytes: UInt64, kind: StorageCategory.Kind, naming: Job.Naming) -> StorageItem {
+        let values = try? URL(fileURLWithPath: path).resourceValues(forKeys: [.isDirectoryKey, .isPackageKey])
+        return StorageItem(name: name(path, naming), path: path, bytes: bytes, canMoveToBin: canMoveToBin(path, kind),
+                           isFolder: values?.isDirectory == true && values?.isPackage != true)
     }
+
+    /// Your own files and the apps you installed, at any depth. Never: anything outside your home folder and
+    /// Applications, libraries (Photos, Music, Mail, Messages, iCloud Drive), Safari, Apple's data, the
+    /// Library's own folders (keychains, settings, accounts), or keys and settings in hidden folders.
+    private static func canMoveToBin(_ path: String, _ kind: StorageCategory.Kind) -> Bool {
+        guard ![.macOS, .systemData, .mail, .messages, .iCloudDrive].contains(kind) else { return false }
+        if path.hasPrefix("/Applications/") {
+            guard !path.hasPrefix("/Applications/Utilities") else { return false }
+            return !isProtectedApp(path)
+        }
+        let home = NSHomeDirectory()
+        guard path.hasPrefix(home + "/") else { return false }
+        let parts = path.dropFirst(home.count + 1).split(separator: "/").map(String.init)
+        guard let top = parts.first else { return false }
+
+        if top == "Library" {
+            // Only an app's own folder (or what's inside it) where apps keep data, and developer files.
+            let appData: Set = ["Application Support", "Caches", "Containers", "Group Containers", "Logs", "Developer"]
+            guard parts.count >= 3, appData.contains(parts[1]) else { return false }
+            let app = parts[2]
+            guard !app.hasPrefix("com.apple."), !app.hasPrefix("group.com.apple."), !appleData.contains(app) else { return false }
+            // Xcode's folder holds archives, needed to read crash reports for apps you shipped. What's
+            // beside them, like DerivedData, can go.
+            if parts[1] == "Developer" && app == "Xcode" { return parts.count >= 4 && parts[3] != "Archives" }
+            return true
+        }
+        if top.hasPrefix(".") {
+            // Keys, credentials and settings stay; tools' data and caches can go.
+            let isFile = (try? URL(fileURLWithPath: home + "/" + top).resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory != true
+            guard !isFile, !hiddenKept.contains(top) else { return false }
+        }
+        if top == "Public" || parts.starts(with: ["Music", "Music"]) || path.contains(".photoslibrary") { return false }
+        return !(path.hasSuffix(".app") && isProtectedApp(path))
+    }
+
+    /// Apple's own folders inside Application Support and the other app data folders.
+    private static let appleData: Set = [
+        "AddressBook", "CallHistoryDB", "CallHistoryTransactions", "CloudDocs", "Knowledge", "MobileSync", "FileProvider",
+        "iCloud", "Dock", "CrashReporter", "Animoji", "AppStore", "DiskImages", "SyncServices", "icdd", "Safari",
+    ]
+
+    /// Hidden folders in your home folder that hold keys, credentials or settings.
+    private static let hiddenKept: Set = [
+        ".ssh", ".gnupg", ".aws", ".azure", ".kube", ".config", ".docker", ".local", ".password-store", ".Trash", ".git",
+    ]
+
+    /// Safari, which is part of macOS, and DiagnoMac itself. Apple's App Store apps, like Xcode or iMovie,
+    /// can be uninstalled like any other.
+    private static func isProtectedApp(_ path: String) -> Bool {
+        guard let id = Bundle(path: path)?.bundleIdentifier else { return false }
+        return id == "com.apple.Safari" || id == Bundle.main.bundleIdentifier
+    }
+
+    #if DEBUG
+    static func debugCanMoveToBin(_ path: String, _ kind: StorageCategory.Kind) -> Bool { canMoveToBin(path, kind) }
+    #endif
 
     // MARK: Suggestions
 
@@ -279,11 +339,12 @@ enum StorageBreakdownCollector {
         for result in results {
             var category = categories[result.job.kind] ?? StorageCategory(kind: result.job.kind, bytes: 0, items: [])
             category.bytes += result.bytes
-            category.items += result.items
+            category.children += result.children
             categories[result.job.kind] = category
         }
         for (kind, category) in categories {
-            categories[kind]?.items = Array(category.items.filter { $0.bytes >= 1_048_576 }.sorted { $0.bytes > $1.bytes }.prefix(8))
+            categories[kind]?.children = Array(category.children.sorted { $0.bytes > $1.bytes }.prefix(listLimit))
+            categories[kind]?.refreshItems()
         }
         if usage.macOS > 0 { categories[.macOS] = StorageCategory(kind: .macOS, bytes: usage.macOS, items: []) }
         // What's left: swap, snapshots, other users, and folders macOS kept from DiagnoMac.

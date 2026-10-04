@@ -12,18 +12,24 @@ struct StorageBreakdown: Codable, Sendable {
     /// Big things that don't look used any more, largest first.
     var suggestions: [StorageSuggestion] = []
 
-    /// After moving things to the Bin: they leave their categories and the suggestions, and the Bin grows.
+    /// After moving things to the Bin, from any depth: their size leaves the category and the folders
+    /// that held them, they leave the suggestions, and the Bin grows.
     mutating func movedToBin(_ moved: [StorageItem]) {
-        let paths = Set(moved.map(\.path))
         var binned: UInt64 = 0
-        for index in categories.indices {
-            for item in categories[index].items where paths.contains(item.path) {
-                categories[index].bytes -= min(categories[index].bytes, item.bytes)
-                binned += item.bytes
+        for item in moved {
+            guard let index = categories.firstIndex(where: { $0.children.contains { $0.holds(item) } }) else { continue }
+            categories[index].bytes -= min(categories[index].bytes, item.bytes)
+            categories[index].children = categories[index].children.compactMap { child in
+                if child.path == item.path { return nil }
+                guard child.holds(item) else { return child }
+                var smaller = child
+                smaller.bytes -= min(child.bytes, item.bytes)
+                return smaller
             }
-            categories[index].items.removeAll { paths.contains($0.path) }
+            categories[index].refreshItems()
+            binned += item.bytes
         }
-        suggestions.removeAll { paths.contains($0.item.path) }
+        suggestions.removeAll { suggestion in moved.contains { $0.holds(suggestion.item) } }
         if let bin = categories.firstIndex(where: { $0.kind == .bin }) {
             categories[bin].bytes += binned
         } else if binned > 0 {
@@ -118,16 +124,62 @@ struct StorageCategory: Codable, Sendable, Identifiable {
 
     let kind: Kind
     var bytes: UInt64
-    /// The biggest things inside, largest first.
+    /// The biggest things inside, largest first: the summary the assistant and suggestions read.
     var items: [StorageItem]
+    /// Everything directly inside, largest first, for browsing the category.
+    var children: [StorageItem] = []
     var id: Kind { kind }
+
+    mutating func refreshItems() {
+        items = Array(children.filter { $0.bytes >= 1_048_576 }.prefix(8))
+    }
 }
 
 struct StorageItem: Codable, Sendable, Identifiable {
     let name: String
     let path: String
-    let bytes: UInt64
+    var bytes: UInt64
     /// Your own files and apps you installed. Never libraries, Apple's apps or the system.
     var canMoveToBin = false
+    /// A folder you can open. Apps and other packages count as files, as in Finder.
+    var isFolder = false
     var id: String { path }
+
+    /// This is the other item, or a folder it's somewhere inside.
+    func holds(_ other: StorageItem) -> Bool {
+        other.path == path || other.path.hasPrefix(path + "/")
+    }
+}
+
+// Breakdowns saved by earlier versions lack the newer fields.
+extension StorageItem {
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        name = try values.decode(String.self, forKey: .name)
+        path = try values.decode(String.self, forKey: .path)
+        bytes = try values.decode(UInt64.self, forKey: .bytes)
+        canMoveToBin = try values.decodeIfPresent(Bool.self, forKey: .canMoveToBin) ?? false
+        isFolder = try values.decodeIfPresent(Bool.self, forKey: .isFolder) ?? false
+    }
+}
+
+extension StorageCategory {
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        kind = try values.decode(Kind.self, forKey: .kind)
+        bytes = try values.decode(UInt64.self, forKey: .bytes)
+        items = try values.decode([StorageItem].self, forKey: .items)
+        children = try values.decodeIfPresent([StorageItem].self, forKey: .children) ?? items
+    }
+}
+
+extension StorageBreakdown {
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        categories = try values.decode([StorageCategory].self, forKey: .categories)
+        measuredAt = try values.decode(Date.self, forKey: .measuredAt)
+        isComplete = try values.decode(Bool.self, forKey: .isComplete)
+        needsAccess = try values.decode([StorageCategory.Kind].self, forKey: .needsAccess)
+        suggestions = try values.decodeIfPresent([StorageSuggestion].self, forKey: .suggestions) ?? []
+    }
 }
