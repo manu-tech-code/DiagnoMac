@@ -13,6 +13,7 @@ import SwiftUI
 ///   -captureSpeedTest         run a speed test and capture it mid-run and when finished
 ///   -capturePowerHistory      fill the Battery page's power chart with made-up readings, with a gap
 ///   -captureMenuBarPanel      capture the menu bar panel's contents as menubar.png
+///   -captureStorageBreakdown  measure what's using the disk first, and wait for it
 @MainActor
 enum DebugCapture {
     private static let args = ProcessInfo.processInfo.arguments
@@ -95,6 +96,13 @@ enum DebugCapture {
                 if let group = model.snapshot.logs?.groups(since: Date().addingTimeInterval(-7 * 86_400)).first {
                     model.explain(group)
                 }
+            }
+
+            if args.contains("-captureStorageBreakdown") {
+                let start = Date.now
+                model.measureStorage()
+                while model.storageProgress != nil { try? await Task.sleep(for: .seconds(1)) }
+                NSLog("DiagnoMac capture: storage measured in %.0f s", Date.now.timeIntervalSince(start))
             }
 
             if args.contains("-captureMenuBarPanel") {
@@ -180,6 +188,12 @@ enum DebugCapture {
             out += "\n[\(key)] \(text.text)\(text.error.map { " ERROR: \($0)" } ?? "")\n"
         }
         out += "\nSPEED TEST: \(model.speedTest.phase) \(String(describing: model.speedTest.result))\n"
+        if let breakdown = model.snapshot.storageBreakdown {
+            out += "\nSTORAGE (complete: \(breakdown.isComplete), needs access: \(breakdown.needsAccess.map(\.rawValue)))\n"
+            for category in breakdown.categories {
+                out += "\(category.kind.title): \(Format.bytes(category.bytes))  " + category.items.prefix(4).map { "\($0.name) \(Format.bytes($0.bytes))" }.joined(separator: ", ") + "\n"
+            }
+        }
         out += "\n\(model.reportText)\n"
         try? out.write(to: dir.appending(path: "dump.txt"), atomically: true, encoding: .utf8)
     }

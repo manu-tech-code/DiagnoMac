@@ -63,6 +63,7 @@ final class AppModel {
             selection = area
         }
         intelligence.context = { [unowned self] in (self.snapshot.value, self.findings) }
+        snapshot.storageBreakdown = StorageBreakdownStore.load()
         // Plugging in or unplugging the charger is reported straight away, without polling.
         powerSourceObserver = PowerSourceObserver { [weak self] in
             Task { await self?.sampleBattery() }
@@ -449,6 +450,42 @@ final class AppModel {
         for candidate in candidates { messages.append(await StorageCollector.clean(candidate)) }
         show(messages.joined(separator: " "))
         await refresh(.storage)
+        if snapshot.storageBreakdown != nil { measureStorage() }
+    }
+
+    // MARK: Storage breakdown
+
+    struct StorageProgress: Equatable {
+        var done: Int
+        var total: Int
+    }
+
+    /// How far the storage breakdown has got, while it's being measured.
+    private(set) var storageProgress: StorageProgress?
+
+    /// Measures what's using the disk. The first time, macOS may ask to let DiagnoMac read some folders.
+    func measureStorage() {
+        guard storageProgress == nil else { return }
+        storageProgress = StorageProgress(done: 0, total: 0)
+        // The first time, folders fill in as they're measured. After that the last breakdown stays up
+        // until the new one is ready, rather than every row dropping to zero and growing back.
+        let showPartial = snapshot.storageBreakdown == nil
+        Task {
+            let breakdown = await StorageBreakdownCollector.measure { [weak self] partial, done, total in
+                guard let self else { return }
+                if showPartial { snapshot.storageBreakdown = partial }
+                storageProgress = StorageProgress(done: done, total: total)
+            }
+            snapshot.storageBreakdown = breakdown
+            storageProgress = nil
+            StorageBreakdownStore.save(breakdown)
+        }
+    }
+
+    /// Measures again when the Storage page opens, if the last breakdown is over an hour old.
+    func refreshStorageBreakdownIfStale() {
+        guard let last = snapshot.storageBreakdown, Date().timeIntervalSince(last.measuredAt) > 3600 else { return }
+        measureStorage()
     }
 
     func setStartupItem(_ item: StartupItem, enabled: Bool) async {
