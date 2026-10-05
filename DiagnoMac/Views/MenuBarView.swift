@@ -78,6 +78,12 @@ struct MenuBarView: View {
                 model.updates.checkForUpdates()
             }
 
+            Button { model.cleaning.start() } label: {
+                Label("Cleaning mode · \(model.cleaning.minutes) min", systemImage: "sparkles")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .help("Turns off the keyboard and trackpad while you wipe the Mac. Hold Esc for 3 seconds to stop early.")
+
             HStack {
                 Button("Open DiagnoMac") {
                     AppDelegate.showMainWindow(using: openWindow)
