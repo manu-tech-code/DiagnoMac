@@ -43,6 +43,7 @@ final class AppModel {
 
     let intelligence = Intelligence()
     let updates = UpdateService()
+    let cleaning = CleaningMode()
 
     var score: Int { FindingsEngine.score(findings) }
 
@@ -63,6 +64,7 @@ final class AppModel {
             selection = area
         }
         intelligence.context = { [unowned self] in (self.snapshot.value, self.findings) }
+        cleaning.onEnded = { [weak self] message in self?.show(message) }
         snapshot.storageBreakdown = StorageBreakdownStore.load()
         // Plugging in or unplugging the charger is reported straight away, without polling.
         powerSourceObserver = PowerSourceObserver { [weak self] in

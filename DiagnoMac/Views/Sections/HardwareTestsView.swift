@@ -3,8 +3,9 @@ import SwiftUI
 
 struct HardwareTestsView: View {
     var body: some View {
-        Page("Hardware Tests", subtitle: "Interactive tests for parts that sensors can't check for you.") {
+        Page("Hardware Tests", subtitle: "Interactive tests for parts that sensors can't check for you, and Cleaning mode for wiping the Mac down.") {
             VStack(alignment: .leading, spacing: 14) {
+                CleaningModeCard()
                 KeyboardTestCard()
                 Columns(minimum: 320) {
                     DisplayTestCard()

@@ -108,7 +108,7 @@ swift scripts/make-icon.swift
 - Debug builds accept `-captureScreens <dir>`, which saves a PNG of each page after the first scan and quits. Add
   `-captureDelay <seconds>`, `-captureAsk "<question>"` (also runs the Explain features), `-captureSpeedTest` or
   `-capturePowerHistory` (fills the power chart with made-up readings and a gap); a `dump.txt` with the AI output and
-  report is written alongside.
+  report is written alongside. `-captureCleaningOverlay` captures the Cleaning mode countdown screen, and `-testCleaning <seconds> -testCleaningFile <file> [-testCleaningPost]` runs Cleaning mode for real (once macOS has allowed DiagnoMac), sends it test input, and writes what was swallowed to the file.
 
 ## Updates
 
