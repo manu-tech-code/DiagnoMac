@@ -39,8 +39,8 @@ targets:
       path: DiagnoMac/Resources/Info.plist
       properties:
         CFBundleDisplayName: DiagnoMac
-        CFBundleShortVersionString: "0.2.5"
-        CFBundleVersion: "7"
+        CFBundleShortVersionString: "0.2.6"
+        CFBundleVersion: "8"
         LSApplicationCategoryType: public.app-category.utilities
         LSMinimumSystemVersion: "15.0"
         NSHumanReadableCopyright: "© 2026 Emmanuel Larbi"
