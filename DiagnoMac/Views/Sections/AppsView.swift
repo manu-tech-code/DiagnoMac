@@ -13,13 +13,15 @@ struct AppsView: View {
 
     var body: some View {
         Page("Running Apps", subtitle: "Everything open on this Mac, including apps that only live in the menu bar or background. Quit what you don't need.") {
+            // Its own row, not in the header: beside the description it ran into it.
             Picker("Show", selection: $filter) {
                 ForEach(Filter.allCases) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .frame(width: 430)
-        } content: {
+            .frame(maxWidth: 520)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
             if let apps = model.snapshot.apps {
                 let idle = apps.filter(\.isIdle)
                 Columns(minimum: 200) {
