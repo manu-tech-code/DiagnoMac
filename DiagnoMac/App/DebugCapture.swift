@@ -15,6 +15,9 @@ import SwiftUI
 ///   -captureMenuBarPanel      capture the menu bar panel's contents as menubar.png
 ///   -captureStorageBreakdown  measure what's using the disk first, and wait for it
 ///   -browseStorage <category> [-browseFolder <path>]   open the Storage page's browser there
+///   -captureCleaningOverlay   capture the Cleaning mode countdown screen as cleaning.png, without starting it
+///   -testCleaning <seconds> -testCleaningFile <file> [-testCleaningPost]   start Cleaning mode for a few seconds, and
+///                             with -testCleaningPost send it test input and hold Esc; results go to the file
 @MainActor
 enum DebugCapture {
     private static let args = ProcessInfo.processInfo.arguments
@@ -61,6 +64,11 @@ enum DebugCapture {
         }
         // `-showUpdateFound <version>`: the sidebar's update button as if a check had found that version.
         if let version = value("-showUpdateFound") { model.updates.debugFound(version) }
+        // `-testCleaning`: Cleaning mode end to end, if macOS has already allowed DiagnoMac.
+        if let seconds = value("-testCleaning").flatMap(Double.init), let file = value("-testCleaningFile") {
+            Task { await testCleaning(model: model, seconds: seconds, post: args.contains("-testCleaningPost"), file: file) }
+            return
+        }
         // `-captureNow <png>`: after -captureDelay seconds (8 by default), save the window as it is, then quit.
         // Quicker than -captureScreens when one page is enough, like the Storage browser with -browseStorage.
         if let file = value("-captureNow") {
@@ -154,6 +162,20 @@ enum DebugCapture {
                 NSLog("DiagnoMac capture: storage measured in %.0f s", Date.now.timeIntervalSince(start))
             }
 
+            if args.contains("-captureCleaningOverlay") {
+                model.cleaning.debugPreview(secondsLeft: 107)
+                let screen = NSScreen.main?.frame ?? NSRect(x: 0, y: 0, width: 1512, height: 982)
+                let window = NSWindow(contentViewController: NSHostingController(rootView: CleaningOverlayView(mode: model.cleaning)))
+                window.setFrame(NSRect(x: 0, y: 0, width: screen.width * 0.6, height: screen.height * 0.6), display: true)
+                window.makeKeyAndOrderFront(nil)
+                try? await Task.sleep(for: .seconds(2))
+                capture(window, to: dir.appending(path: "cleaning.png"))
+                model.cleaning.debugPreview(secondsLeft: 107, holding: 0.55)
+                try? await Task.sleep(for: .seconds(1))
+                capture(window, to: dir.appending(path: "cleaning-holding.png"))
+                window.close()
+            }
+
             if args.contains("-captureMenuBarPanel") {
                 // In an ordinary window: SwiftUI's menu bar icon only opens its panel on a real click.
                 let panel = NSWindow(contentViewController: NSHostingController(rootView: MenuBarView().environment(model)))
@@ -211,6 +233,55 @@ enum DebugCapture {
             let battery = 28 + 4 * sin(ago / 25)
             return PowerSample(date: now.addingTimeInterval(-ago), input: battery + system + 3, battery: battery, system: system)
         }
+    }
+
+    private static func testCleaning(model: AppModel, seconds: Double, post: Bool, file: String) async {
+        try? await Task.sleep(for: .seconds(4))
+        let mode = model.cleaning
+        mode.refreshPermission()
+        var out = "trusted=\(mode.isTrusted)\n"
+        func finish() { try? out.write(toFile: file, atomically: true, encoding: .utf8); NSApp.terminate(nil) }
+        // 0 seconds only reports whether macOS has allowed it, without turning anything off.
+        guard mode.isTrusted, seconds > 0 else { finish(); return }
+
+        let frontBefore = NSWorkspace.shared.frontmostApplication?.localizedName ?? "?"
+        let startedAt = Date()
+        mode.start(for: seconds)
+        out += "active=\(mode.isActive) tap=\(mode.tapLocation) failure=\(mode.failure ?? "none")\n"
+        guard mode.isActive else { finish(); return }
+
+        if post {
+            try? await Task.sleep(for: .seconds(1))
+            let cursorBefore = NSEvent.mouseLocation
+            let swallowedBefore = mode.swallowed
+            let source = CGEventSource(stateID: .hidSystemState)
+            var posted = 0
+            func send(_ event: CGEvent?) { event?.post(tap: .cghidEventTap); posted += 1 }
+            for code: CGKeyCode in [7, 8] {  // x, c
+                send(CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: true))
+                send(CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: false))
+            }
+            let tab = CGEvent(keyboardEventSource: source, virtualKey: 48, keyDown: true)  // Command-Tab, the app switcher
+            tab?.flags = .maskCommand
+            send(tab)
+            send(CGEvent(mouseEventSource: source, mouseType: .mouseMoved, mouseCursorPosition: CGPoint(x: 400, y: 400), mouseButton: .left))
+            send(CGEvent(mouseEventSource: source, mouseType: .leftMouseDown, mouseCursorPosition: CGPoint(x: 400, y: 400), mouseButton: .left))
+            send(CGEvent(mouseEventSource: source, mouseType: .leftMouseUp, mouseCursorPosition: CGPoint(x: 400, y: 400), mouseButton: .left))
+            send(CGEvent(scrollWheelEvent2Source: source, units: .pixel, wheelCount: 1, wheel1: 30, wheel2: 0, wheel3: 0))
+            try? await Task.sleep(for: .seconds(1))
+            out += "posted=\(posted) swallowed=\(mode.swallowed - swallowedBefore) leakedToWindow=\(mode.leaked)\n"
+            out += "cursor moved=\(NSEvent.mouseLocation != cursorBefore) frontmost before=\(frontBefore) after=\(NSWorkspace.shared.frontmostApplication?.localizedName ?? "?")\n"
+
+            // Holding Esc ends it after \(CleaningMode.holdSeconds) seconds.
+            let heldAt = Date()
+            send(CGEvent(keyboardEventSource: source, virtualKey: 53, keyDown: true))
+            while mode.isActive && Date().timeIntervalSince(heldAt) < 8 { try? await Task.sleep(for: .milliseconds(100)) }
+            out += "esc hold ended it: \(!mode.isActive) after \(String(format: "%.1f", Date().timeIntervalSince(heldAt))) s\n"
+            send(CGEvent(keyboardEventSource: source, virtualKey: 53, keyDown: false))
+        }
+        while mode.isActive { try? await Task.sleep(for: .milliseconds(200)) }
+        out += "ended after \(String(format: "%.1f", Date().timeIntervalSince(startedAt))) s; banner: \(model.banner ?? "none")\n"
+        finish()
     }
 
     private static func capture(to url: URL) {
