@@ -7,8 +7,6 @@ struct StartupView: View {
     var body: some View {
         let _ = model.intelligence.checkAvailabilityIfNeeded()
         Page("Startup Items", subtitle: "Background agents that start at login. Each one costs memory, battery and boot time.") {
-            Button("Refresh") { Task { await model.refresh(.startup) } }
-        } content: {
             if let items = model.snapshot.startup {
                 if items.isEmpty {
                     Card { Text("No third-party launch agents or daemons are installed.").foregroundStyle(.secondary) }

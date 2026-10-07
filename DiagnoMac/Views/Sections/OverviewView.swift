@@ -7,14 +7,6 @@ struct OverviewView: View {
 
     var body: some View {
         Page("Health Overview", subtitle: "Every check, worst first. Each finding links to the details and a fix.") {
-            Button {
-                Task { await model.scan() }
-            } label: {
-                Label(model.isScanning ? "Scanning…" : "Run Full Scan", systemImage: "waveform.path.ecg")
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(model.isScanning)
-        } content: {
             CardRow {
                 scoreCard.frame(minWidth: 440)
                 machineCard.frame(width: 290)

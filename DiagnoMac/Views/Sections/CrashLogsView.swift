@@ -15,7 +15,6 @@ struct CrashLogsView: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 220)
-                Button("Refresh") { Task { await model.refresh(.logs) } }
             }
         } content: {
             if let logs = model.snapshot.logs {
