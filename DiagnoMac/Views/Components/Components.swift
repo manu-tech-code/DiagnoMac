@@ -860,3 +860,23 @@ struct SegmentedFilter<Option: Hashable & Identifiable>: View {
         .fixedSize()
     }
 }
+
+/// Shows `wide` when it has at least `threshold` points of width and `narrow` when it has less. Only the
+/// layout in use counts toward the page's minimum width, so a table with fixed columns can keep them in a
+/// big window and still let a small one shrink (`ViewThatFits` holds the window open at the wider size).
+struct WidthSwitch<Wide: View, Narrow: View>: View {
+    let threshold: CGFloat
+    @ViewBuilder var wide: () -> Wide
+    @ViewBuilder var narrow: () -> Narrow
+
+    // Starts wide: the first measurement comes in the same layout pass.
+    @State private var width: CGFloat = .infinity
+
+    var body: some View {
+        Group {
+            if width >= threshold { wide() } else { narrow() }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+    }
+}
