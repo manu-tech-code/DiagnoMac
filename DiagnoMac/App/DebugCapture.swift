@@ -15,6 +15,7 @@ import SwiftUI
 ///   -captureMenuBarPanel      capture the menu bar panel's contents as menubar.png
 ///   -captureStorageBreakdown  measure what's using the disk first, and wait for it
 ///   -appsFilter <name>          open Running Apps with that filter selected (All, With Windows, Menu Bar & Background, Idle)
+///   -windowSize <W>x<H>         with -captureNow, capture at that window size
 ///   -browseStorage <category> [-browseFolder <path>]   open the Storage page's browser there
 ///   -captureCleaningOverlay   capture the Cleaning mode countdown screen as cleaning.png, without starting it
 ///   -testCleaning <seconds> -testCleaningFile <file> [-testCleaningPost]   start Cleaning mode for a few seconds, and
@@ -75,7 +76,15 @@ enum DebugCapture {
         if let file = value("-captureNow") {
             Task {
                 try? await Task.sleep(for: .seconds(value("-captureDelay").flatMap(Double.init) ?? 8))
+                // `-windowSize 760x560`: capture at that size, then put the saved size back (it's shared with the installed app).
+                let main = NSApp.windows.first { $0.identifier?.rawValue == AppDelegate.mainWindowID }
+                let original = main?.frame
+                if let size = value("-windowSize")?.split(separator: "x").compactMap({ Double($0) }), size.count == 2, let main {
+                    main.setFrame(NSRect(x: main.frame.minX, y: main.frame.maxY - size[1], width: size[0], height: size[1]), display: true)
+                    try? await Task.sleep(for: .seconds(2))
+                }
                 capture(to: URL(fileURLWithPath: file))
+                if let original { main?.setFrame(original, display: true) }
                 if !FileManager.default.fileExists(atPath: file) {
                     // Say why there's no picture.
                     let main = NSApp.windows.first { $0.identifier?.rawValue == AppDelegate.mainWindowID }
