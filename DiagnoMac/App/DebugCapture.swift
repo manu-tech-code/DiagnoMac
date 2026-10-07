@@ -14,6 +14,7 @@ import SwiftUI
 ///   -capturePowerHistory      fill the Battery page's power chart with made-up readings, with a gap
 ///   -captureMenuBarPanel      capture the menu bar panel's contents as menubar.png
 ///   -captureStorageBreakdown  measure what's using the disk first, and wait for it
+///   -appsFilter <name>          open Running Apps with that filter selected (All, With Windows, Menu Bar & Background, Idle)
 ///   -browseStorage <category> [-browseFolder <path>]   open the Storage page's browser there
 ///   -captureCleaningOverlay   capture the Cleaning mode countdown screen as cleaning.png, without starting it
 ///   -testCleaning <seconds> -testCleaningFile <file> [-testCleaningPost]   start Cleaning mode for a few seconds, and

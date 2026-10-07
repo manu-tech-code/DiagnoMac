@@ -809,3 +809,54 @@ private struct UpdateButtonStyle: ButtonStyle {
             .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
     }
 }
+
+/// A row of choices, one selected, like a segmented control but laid out by us: its size comes from its
+/// labels alone, so selecting a choice never changes the width. (The native segmented Picker grew and
+/// spilled over what was beside it.) Falls back to the short labels when the full ones don't fit.
+struct SegmentedFilter<Option: Hashable & Identifiable>: View {
+    let options: [Option]
+    @Binding var selection: Option
+    let label: (Option) -> String
+    var shortLabel: ((Option) -> String)?
+
+    @Namespace private var highlight
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            row(label)
+            if let shortLabel { row(shortLabel) }
+        }
+    }
+
+    private func row(_ text: @escaping (Option) -> String) -> some View {
+        HStack(spacing: 2) {
+            ForEach(options) { option in
+                let isSelected = option == selection
+                Button {
+                    withAnimation(.smooth(duration: 0.3)) { selection = option }
+                } label: {
+                    Text(text(option))
+                        // One weight for all, or the selected one is wider and the whole control shifts.
+                        .font(.callout.weight(.medium))
+                        .lineLimit(1)
+                        .foregroundStyle(isSelected ? Color.white : Color.primary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 6)
+                        .background {
+                            if isSelected {
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .fill(Color.accentColor)
+                                    .matchedGeometryEffect(id: "highlight", in: highlight)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+            }
+        }
+        .padding(2)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .fixedSize()
+    }
+}
