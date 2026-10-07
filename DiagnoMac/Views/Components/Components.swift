@@ -858,6 +858,8 @@ struct SegmentedFilter<Option: Hashable & Identifiable>: View {
         .padding(2)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
         .fixedSize()
+    }
+}
 
 /// A main card and a narrower fixed-width one beside it, as tall as each other. When there isn't room for the
 /// main card at its minimum width plus the side one, they stack instead. Unlike `ViewThatFits`, it reports a
