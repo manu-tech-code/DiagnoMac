@@ -2,7 +2,14 @@ import SwiftUI
 
 struct AssistantView: View {
     @Environment(AppModel.self) private var model
-    @State private var question = ""
+    @State private var question: String = {
+        #if DEBUG
+        // `-assistantDraft "text"`: start with that typed into the input, for screenshots.
+        let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "-assistantDraft"), i + 1 < args.count { return args[i + 1] }
+        #endif
+        return ""
+    }()
     @FocusState private var inputFocused: Bool
 
     private var ai: Intelligence { model.intelligence }
@@ -26,16 +33,30 @@ struct AssistantView: View {
                 }
             }
 
-            HStack(alignment: .top, spacing: 18) {
-                if ai.isAvailable { chat } else { unavailable.fixedSize(horizontal: false, vertical: true) }
-                // Its own height, not the chat's.
-                infoCard.frame(width: 270).fixedSize(horizontal: false, vertical: true)
+            // The "How it works" card beside the chat when there's room for both, otherwise a line under the
+            // header: squeezed beside it, the chat and its input were too narrow to use.
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 18) {
+                    mainColumn.frame(minWidth: 440, idealWidth: 440, maxWidth: .infinity)
+                    // Its own height, not the chat's.
+                    infoCard.frame(width: 270).fixedSize(horizontal: false, vertical: true)
+                }
+                VStack(alignment: .leading, spacing: 10) {
+                    Label("Runs on this Mac. Nothing is sent anywhere, and the model can get details wrong.", systemImage: "lock.shield")
+                        .font(.caption).foregroundStyle(.secondary)
+                    mainColumn
+                }
             }
         }
         .padding(28)
         .frame(maxWidth: 1100, maxHeight: .infinity, alignment: .topLeading)
         .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear { ai.refreshAvailability() }
+    }
+
+    @ViewBuilder
+    private var mainColumn: some View {
+        if ai.isAvailable { chat } else { unavailable.fixedSize(horizontal: false, vertical: true) }
     }
 
     // MARK: Chat
@@ -64,27 +85,54 @@ struct AssistantView: View {
 
             if !ai.messages.isEmpty && !ai.isResponding { suggestionChips }
 
-            HStack(spacing: 8) {
-                TextField("Ask about battery, memory, apps, storage…", text: $question, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .lineLimit(1...4)
-                    .focused($inputFocused)
-                    .onSubmit(send)
-                    .padding(.horizontal, 12).padding(.vertical, 9)
-                    .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
-                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator))
-                if ai.isResponding {
-                    Button("Stop") { ai.stopResponding() }
-                } else {
-                    Button("Ask", action: send)
-                        .buttonStyle(.borderedProminent)
-                        .keyboardShortcut(.return, modifiers: [.command])
-                        .disabled(question.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-            }
+            composer
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { inputFocused = true }
+    }
+
+    /// One rounded box that grows with what you type, with the send button inside it, like a message field.
+    private var composer: some View {
+        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+        return HStack(alignment: .bottom, spacing: 8) {
+            TextField("Ask about this Mac…", text: $question, axis: .vertical)
+                .textFieldStyle(.plain)
+                .lineLimit(1...6)
+                .focused($inputFocused)
+                .onSubmit(send)
+                .padding(.leading, 16)
+                .padding(.vertical, 12)
+            sendButton.padding(.trailing, 8).padding(.bottom, 8)
+        }
+        .frame(minHeight: 48)
+        .background(.background.secondary, in: shape)
+        .overlay(shape.strokeBorder(inputFocused ? AnyShapeStyle(Color.accentColor.opacity(0.7)) : AnyShapeStyle(.separator),
+                                    lineWidth: inputFocused ? 1.5 : 1))
+        .contentShape(shape)
+        .onTapGesture { inputFocused = true }
+        .animation(.smooth(duration: 0.2), value: inputFocused)
+    }
+
+    @ViewBuilder
+    private var sendButton: some View {
+        let isEmpty = question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        if ai.isResponding {
+            Button { ai.stopResponding() } label: {
+                Image(systemName: "stop.circle.fill").font(.system(size: 28)).foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Stop")
+        } else {
+            Button(action: send) {
+                Image(systemName: "arrow.up.circle.fill")
+                    .font(.system(size: 28))
+                    .foregroundStyle(isEmpty ? AnyShapeStyle(.quaternary) : AnyShapeStyle(Color.accentColor))
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut(.return, modifiers: [.command])
+            .disabled(isEmpty)
+            .help("Ask (⌘↩)")
+        }
     }
 
     private var suggestionChips: some View {
