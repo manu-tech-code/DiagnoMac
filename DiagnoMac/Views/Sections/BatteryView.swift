@@ -6,8 +6,6 @@ struct BatteryView: View {
 
     var body: some View {
         Page("Battery", subtitle: "Charge, power flow and wear. Plug in the charger to see where the power goes.") {
-            Button("Refresh") { Task { await model.refresh(.battery) } }
-        } content: {
             if let b = model.snapshot.battery {
                 hero(b)
 

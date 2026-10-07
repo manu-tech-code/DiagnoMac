@@ -13,11 +13,6 @@ struct StorageView: View {
 
     var body: some View {
         Page("Storage", subtitle: "Drive health, backups, and files you can safely remove.") {
-            Button("Rescan") {
-                Task { await model.refresh(.storage) }
-                if model.snapshot.storageBreakdown != nil { model.measureStorage() }
-            }
-        } content: {
             if let st = model.snapshot.storage {
                 Columns(minimum: 190) {
                     StatTile(title: "Free space", value: String(format: "%.0f", Double(st.availableBytes) / 1e9), unit: "GB",
@@ -104,6 +99,13 @@ struct StorageView: View {
                         }
                     }
                     if !breakdown.needsAccess.isEmpty { accessNote(breakdown.needsAccess) }
+                    HStack {
+                        Spacer()
+                        Button("Measure Again") { model.measureStorage() }
+                            .controlSize(.small)
+                            .disabled(model.storageProgress != nil)
+                            .help("Measure every folder again. The top-bar scan doesn't, because it takes a minute or two.")
+                    }
                 }
             } else {
                 SegmentBar(segments: [

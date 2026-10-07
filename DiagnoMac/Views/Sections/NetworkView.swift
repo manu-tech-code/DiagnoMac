@@ -8,7 +8,6 @@ struct NetworkView: View {
     var body: some View {
         Page("Network", subtitle: "Connection quality, latency, DNS and throughput.") {
             HStack {
-                Button("Recheck") { Task { await model.refresh(.network) } }
                 if model.speedTest.isRunning {
                     Button("Cancel Test") { model.cancelSpeedTest() }
                 } else {

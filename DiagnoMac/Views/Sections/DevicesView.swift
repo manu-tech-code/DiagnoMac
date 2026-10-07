@@ -5,8 +5,6 @@ struct DevicesView: View {
 
     var body: some View {
         Page("Devices", subtitle: "Everything connected to this Mac: Bluetooth accessories, displays, USB and power.") {
-            Button("Refresh") { Task { await model.refresh(.devices) } }
-        } content: {
             if let devices = model.snapshot.devices {
                 CardRow {
                     bluetoothCard(devices)

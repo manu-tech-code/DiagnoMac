@@ -9,8 +9,6 @@ struct MemoryView: View {
 
     var body: some View {
         Page("Memory", subtitle: "How RAM is being used, and how to take pressure off it.") {
-            Button("Refresh") { Task { await model.refresh(.memory) } }
-        } content: {
             if let m = model.snapshot.memory {
                 Columns(minimum: 190) {
                     StatTile(title: "Memory pressure", value: m.pressure.label,
