@@ -4,23 +4,34 @@ struct AppsView: View {
     enum Filter: String, CaseIterable, Identifiable {
         case all = "All", windows = "With Windows", background = "Menu Bar & Background", idle = "Idle"
         var id: String { rawValue }
+
+        var shortName: String {
+            switch self {
+            case .all: "All"
+            case .windows: "Windows"
+            case .background: "Menu bar"
+            case .idle: "Idle"
+            }
+        }
     }
 
     @Environment(AppModel.self) private var model
-    @State private var filter: Filter = .all
+    @State private var filter: Filter = {
+        #if DEBUG
+        // `-appsFilter "With Windows"`: open with that filter selected, for screenshots.
+        let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "-appsFilter"), i + 1 < args.count, let chosen = Filter(rawValue: args[i + 1]) { return chosen }
+        #endif
+        return .all
+    }()
     @State private var pendingQuit: RunningApp?
     @State private var confirmQuitIdle = false
 
     var body: some View {
         Page("Running Apps", subtitle: "Everything open on this Mac, including apps that only live in the menu bar or background. Quit what you don't need.") {
             // Its own row, not in the header: beside the description it ran into it.
-            Picker("Show", selection: $filter) {
-                ForEach(Filter.allCases) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(maxWidth: 520)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            SegmentedFilter(options: Filter.allCases, selection: $filter, label: \.rawValue, shortLabel: \.shortName)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             if let apps = model.snapshot.apps {
                 let idle = apps.filter(\.isIdle)
