@@ -860,3 +860,45 @@ struct SegmentedFilter<Option: Hashable & Identifiable>: View {
         .fixedSize()
     }
 }
+
+/// A main card and a narrower fixed-width one beside it, as tall as each other. When there isn't room for the
+/// main card at its minimum width plus the side one, they stack instead. Unlike `ViewThatFits`, it reports a
+/// minimum width of nearly nothing, so the page never holds the window open wider than it needs to be.
+struct SideBySideOrStacked: Layout {
+    var sideWidth: CGFloat = 290
+    var mainMinWidth: CGFloat = 440
+    var spacing: CGFloat = 14
+
+    private func isWide(_ width: CGFloat?) -> Bool {
+        (width ?? .infinity) >= mainMinWidth + spacing + sideWidth
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard subviews.count == 2 else { return .zero }
+        let width = proposal.width ?? (mainMinWidth + spacing + sideWidth)
+        if isWide(proposal.width) {
+            let main = subviews[0].sizeThatFits(ProposedViewSize(width: width - spacing - sideWidth, height: nil))
+            let side = subviews[1].sizeThatFits(ProposedViewSize(width: sideWidth, height: nil))
+            return CGSize(width: width, height: max(main.height, side.height))
+        }
+        let main = subviews[0].sizeThatFits(ProposedViewSize(width: width, height: nil))
+        let side = subviews[1].sizeThatFits(ProposedViewSize(width: width, height: nil))
+        return CGSize(width: width, height: main.height + spacing + side.height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard subviews.count == 2 else { return }
+        if isWide(bounds.width) {
+            let mainWidth = bounds.width - spacing - sideWidth
+            let height = bounds.height
+            subviews[0].place(at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(width: mainWidth, height: height))
+            subviews[1].place(at: CGPoint(x: bounds.minX + mainWidth + spacing, y: bounds.minY), anchor: .topLeading,
+                              proposal: ProposedViewSize(width: sideWidth, height: height))
+        } else {
+            let main = subviews[0].sizeThatFits(ProposedViewSize(width: bounds.width, height: nil))
+            subviews[0].place(at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(width: bounds.width, height: main.height))
+            subviews[1].place(at: CGPoint(x: bounds.minX, y: bounds.minY + main.height + spacing), anchor: .topLeading,
+                              proposal: ProposedViewSize(width: bounds.width, height: nil))
+        }
+    }
+}

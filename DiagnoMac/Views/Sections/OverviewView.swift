@@ -7,9 +7,10 @@ struct OverviewView: View {
 
     var body: some View {
         Page("Health Overview", subtitle: "Every check, worst first. Each finding links to the details and a fix.") {
-            CardRow {
-                scoreCard.frame(minWidth: 440)
-                machineCard.frame(width: 290)
+            // Side by side when there's room for both, stacked when there isn't.
+            SideBySideOrStacked(sideWidth: 290, mainMinWidth: 440) {
+                scoreCard
+                machineCard
             }
 
             Columns(minimum: 156) {
