@@ -14,8 +14,8 @@ struct CrashLogsView: View {
                     Text("All").tag(3650)
                 }
                 .pickerStyle(.segmented)
+                .labelsHidden()
                 .frame(width: 220)
-                Button("Refresh") { Task { await model.refresh(.logs) } }
             }
         } content: {
             if let logs = model.snapshot.logs {
@@ -35,18 +35,29 @@ struct CrashLogsView: View {
                     if groups.isEmpty {
                         Text("No crash reports in this period.").foregroundStyle(.secondary)
                     } else {
-                        HStack {
-                            Text("App").frame(maxWidth: .infinity, alignment: .leading)
-                            Text("Reports").frame(width: 70, alignment: .trailing)
-                            Text("Kind").frame(width: 150, alignment: .leading)
-                            Text("Last seen").frame(width: 150, alignment: .leading)
-                            Spacer().frame(width: 200)
-                        }
-                        .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                        VStack(spacing: 0) {
-                            ForEach(groups.prefix(40)) { group in
-                                Divider()
-                                row(group)
+                        // The columns need about 750 points; below that each app gets two lines instead.
+                        WidthSwitch(threshold: 750) {
+                            VStack(spacing: 0) {
+                                HStack {
+                                    Text("App").frame(maxWidth: .infinity, alignment: .leading)
+                                    Text("Reports").frame(width: 70, alignment: .trailing)
+                                    Text("Kind").frame(width: 150, alignment: .leading)
+                                    Text("Last seen").frame(width: 150, alignment: .leading)
+                                    Spacer().frame(width: 200)
+                                }
+                                .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                                .padding(.bottom, 6)
+                                ForEach(groups.prefix(40)) { group in
+                                    Divider()
+                                    row(group, compact: false)
+                                }
+                            }
+                        } narrow: {
+                            VStack(spacing: 0) {
+                                ForEach(groups.prefix(40)) { group in
+                                    Divider()
+                                    row(group, compact: true)
+                                }
                             }
                         }
                     }
@@ -62,34 +73,54 @@ struct CrashLogsView: View {
         }
     }
 
-    private func row(_ group: CrashGroup) -> some View {
+    private func processName(_ group: CrashGroup) -> some View {
+        HStack(spacing: 6) {
+            Text(group.process).lineLimit(1)
+            if group.isFirstParty {
+                Text("macOS").font(.caption).foregroundStyle(.secondary)
+                    .padding(.horizontal, 6).padding(.vertical, 1)
+                    .overlay(Capsule().strokeBorder(.separator))
+            }
+        }
+    }
+
+    private func actions(_ group: CrashGroup, key: String) -> some View {
+        HStack(spacing: 8) {
+            Spacer(minLength: 0)
+            if model.intelligence.isAvailable && model.intelligence.text(for: key) == nil {
+                ExplainButton(title: "Explain") { model.explain(group) }.controlSize(.small)
+            }
+            Button("Open Latest") {
+                if let latest = group.reports.max(by: { $0.date < $1.date }) { NSWorkspace.shared.open(latest.url) }
+            }
+            .buttonStyle(.link)
+        }
+    }
+
+    private func row(_ group: CrashGroup, compact: Bool) -> some View {
         let key = "crash.\(group.process)"
+        let kinds = group.kinds.map(\.rawValue).joined(separator: ", ")
+        let lastSeen = group.lastDate.formatted(.dateTime.month(.abbreviated).day().hour().minute())
         return VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                HStack(spacing: 6) {
-                    Text(group.process).lineLimit(1)
-                    if group.isFirstParty {
-                        Text("macOS").font(.caption).foregroundStyle(.secondary)
-                            .padding(.horizontal, 6).padding(.vertical, 1)
-                            .overlay(Capsule().strokeBorder(.separator))
+            if compact {
+                // The name, then the numbers under it, with the buttons on the right.
+                HStack(alignment: .center, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        processName(group)
+                        Text("\(group.count) \(group.count == 1 ? "report" : "reports") · \(kinds) · \(lastSeen)")
+                            .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    actions(group, key: key).fixedSize()
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                Text("\(group.count)").monospacedDigit().frame(width: 70, alignment: .trailing)
-                Text(group.kinds.map(\.rawValue).joined(separator: ", ")).foregroundStyle(.secondary).lineLimit(1)
-                    .frame(width: 150, alignment: .leading)
-                Text(group.lastDate.formatted(.dateTime.month(.abbreviated).day().hour().minute())).frame(width: 150, alignment: .leading)
-                HStack(spacing: 8) {
-                    Spacer()
-                    if model.intelligence.isAvailable && model.intelligence.text(for: key) == nil {
-                        ExplainButton(title: "Explain") { model.explain(group) }.controlSize(.small)
-                    }
-                    Button("Open Latest") {
-                        if let latest = group.reports.max(by: { $0.date < $1.date }) { NSWorkspace.shared.open(latest.url) }
-                    }
-                    .buttonStyle(.link)
+            } else {
+                HStack {
+                    processName(group).frame(maxWidth: .infinity, alignment: .leading)
+                    Text("\(group.count)").monospacedDigit().frame(width: 70, alignment: .trailing)
+                    Text(kinds).foregroundStyle(.secondary).lineLimit(1).frame(width: 150, alignment: .leading)
+                    Text(lastSeen).frame(width: 150, alignment: .leading)
+                    actions(group, key: key).frame(width: 200)
                 }
-                .frame(width: 200)
             }
             if let text = model.intelligence.text(for: key) {
                 AIBlock(title: "Read the latest report on this Mac", text: text,

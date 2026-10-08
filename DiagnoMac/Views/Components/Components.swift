@@ -268,6 +268,26 @@ struct Columns<Content: View>: View {
     }
 }
 
+/// Shows `wide` when it has at least `threshold` points of width and `narrow` when it has less. Only the
+/// layout in use counts toward the page's minimum width, so a table with fixed columns can keep them in a
+/// big window and still let a small one shrink (`ViewThatFits` holds the window open at the wider size).
+struct WidthSwitch<Wide: View, Narrow: View>: View {
+    let threshold: CGFloat
+    @ViewBuilder var wide: () -> Wide
+    @ViewBuilder var narrow: () -> Narrow
+
+    // Starts wide: the first measurement comes in the same layout pass.
+    @State private var width: CGFloat = .infinity
+
+    var body: some View {
+        Group {
+            if width >= threshold { wide() } else { narrow() }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+    }
+}
+
 struct EqualColumnsLayout: Layout {
     var minimum: CGFloat
     var spacing: CGFloat
@@ -807,5 +827,98 @@ private struct UpdateButtonStyle: ButtonStyle {
             .onHover { hovering = $0 }
             .animation(.easeOut(duration: 0.15), value: hovering)
             .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
+/// A row of choices, one selected, like a segmented control but laid out by us: its size comes from its
+/// labels alone, so selecting a choice never changes the width. (The native segmented Picker grew and
+/// spilled over what was beside it.) Falls back to the short labels when the full ones don't fit.
+struct SegmentedFilter<Option: Hashable & Identifiable>: View {
+    let options: [Option]
+    @Binding var selection: Option
+    let label: (Option) -> String
+    var shortLabel: ((Option) -> String)?
+
+    @Namespace private var highlight
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            row(label)
+            if let shortLabel { row(shortLabel) }
+        }
+    }
+
+    private func row(_ text: @escaping (Option) -> String) -> some View {
+        HStack(spacing: 2) {
+            ForEach(options) { option in
+                let isSelected = option == selection
+                Button {
+                    withAnimation(.smooth(duration: 0.3)) { selection = option }
+                } label: {
+                    Text(text(option))
+                        // One weight for all, or the selected one is wider and the whole control shifts.
+                        .font(.callout.weight(.medium))
+                        .lineLimit(1)
+                        .foregroundStyle(isSelected ? Color.white : Color.primary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 6)
+                        .background {
+                            if isSelected {
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .fill(Color.accentColor)
+                                    .matchedGeometryEffect(id: "highlight", in: highlight)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+            }
+        }
+        .padding(2)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .fixedSize()
+    }
+}
+
+/// A main card and a narrower fixed-width one beside it, as tall as each other. When there isn't room for the
+/// main card at its minimum width plus the side one, they stack instead. Unlike `ViewThatFits`, it reports a
+/// minimum width of nearly nothing, so the page never holds the window open wider than it needs to be.
+struct SideBySideOrStacked: Layout {
+    var sideWidth: CGFloat = 290
+    var mainMinWidth: CGFloat = 440
+    var spacing: CGFloat = 14
+
+    private func isWide(_ width: CGFloat?) -> Bool {
+        (width ?? .infinity) >= mainMinWidth + spacing + sideWidth
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard subviews.count == 2 else { return .zero }
+        let width = proposal.width ?? (mainMinWidth + spacing + sideWidth)
+        if isWide(proposal.width) {
+            let main = subviews[0].sizeThatFits(ProposedViewSize(width: width - spacing - sideWidth, height: nil))
+            let side = subviews[1].sizeThatFits(ProposedViewSize(width: sideWidth, height: nil))
+            return CGSize(width: width, height: max(main.height, side.height))
+        }
+        let main = subviews[0].sizeThatFits(ProposedViewSize(width: width, height: nil))
+        let side = subviews[1].sizeThatFits(ProposedViewSize(width: width, height: nil))
+        return CGSize(width: width, height: main.height + spacing + side.height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard subviews.count == 2 else { return }
+        if isWide(bounds.width) {
+            let mainWidth = bounds.width - spacing - sideWidth
+            let height = bounds.height
+            subviews[0].place(at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(width: mainWidth, height: height))
+            subviews[1].place(at: CGPoint(x: bounds.minX + mainWidth + spacing, y: bounds.minY), anchor: .topLeading,
+                              proposal: ProposedViewSize(width: sideWidth, height: height))
+        } else {
+            let main = subviews[0].sizeThatFits(ProposedViewSize(width: bounds.width, height: nil))
+            subviews[0].place(at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(width: bounds.width, height: main.height))
+            subviews[1].place(at: CGPoint(x: bounds.minX, y: bounds.minY + main.height + spacing), anchor: .topLeading,
+                              proposal: ProposedViewSize(width: bounds.width, height: nil))
+        }
     }
 }

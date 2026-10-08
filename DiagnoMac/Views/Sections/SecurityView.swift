@@ -5,8 +5,6 @@ struct SecurityView: View {
 
     var body: some View {
         Page("Security", subtitle: "The protections built into macOS, and whether each one is on.") {
-            Button("Recheck") { Task { await model.refresh(.security) } }
-        } content: {
             if let sec = model.snapshot.security {
                 Columns(minimum: 320) {
                     ForEach(sec.checks) { check in

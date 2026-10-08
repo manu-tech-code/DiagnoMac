@@ -7,8 +7,6 @@ struct PerformanceView: View {
 
     var body: some View {
         Page("CPU & GPU", subtitle: "Live load on the processor and graphics, thermal state, and what's using them.") {
-            Button("Refresh Processes") { Task { await model.refresh(.performance) } }
-        } content: {
             Columns(minimum: 190) {
                 CPUInUseTile()
                 GPUTiles()
