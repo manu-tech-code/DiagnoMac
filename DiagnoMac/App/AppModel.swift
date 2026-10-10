@@ -16,6 +16,9 @@ final class AppModel {
     var history: [HistoryEntry] = HistoryStore.load()
 
     var isScanning = false
+    var isScanningProcesses = false
+    /// Programs asked to stop, so the page can offer to force them if they stay.
+    private(set) var processStopRequests: [Int32: Date] = [:]
     var scanProgress: Double = 0
     var scanStatus = ""
     var lastScan: Date?
@@ -95,7 +98,7 @@ final class AppModel {
     // MARK: Scanning
 
     private var stepsDone = 0.0
-    private let totalSteps = 13.0
+    private let totalSteps = 14.0
 
     private func step(_ name: String) {
         stepsDone += 1
@@ -134,6 +137,10 @@ final class AppModel {
             group.addTask { let v = await CrashLogCollector.collect(); await MainActor.run { self.snapshot.logs = v; self.step("crash logs") } }
             group.addTask { let v = await DevicesCollector.collect(); await MainActor.run { self.snapshot.devices = v; self.step("devices") } }
         }
+
+        scanStatus = "Checking background programs…"
+        snapshot.processScan = await ProcessScanner.scan(startupItems: snapshot.startup ?? [])
+        step("background programs")
 
         updateFindings()
         lastScan = Date()
@@ -338,6 +345,47 @@ final class AppModel {
         case (false, nil):
             break
         }
+    }
+
+    // MARK: Background program scan
+
+    func scanProcesses() async {
+        guard !isScanningProcesses else { return }
+        isScanningProcesses = true
+        snapshot.processScan = await ProcessScanner.scan(startupItems: snapshot.startup ?? [])
+        isScanningProcesses = false
+        updateFindings()
+    }
+
+    func stop(_ process: SuspiciousProcess, force: Bool = false) async {
+        let pid = process.facts.pid
+        guard await ProcessScanner.stop(pid: pid, ownedByYou: process.ownedByYou, force: force) else {
+            show("Couldn't stop \(process.name).")
+            return
+        }
+        processStopRequests[pid] = force ? nil : Date()
+        try? await Task.sleep(for: .milliseconds(600))
+        if !ProcessScanner.isRunning(pid: pid) {
+            processStopRequests[pid] = nil
+            snapshot.processScan?.flagged.removeAll { $0.facts.pid == pid }
+            updateFindings()
+            show("Stopped \(process.name)")
+        } else if !force {
+            show("\(process.name) is still running. Try Force Quit.")
+        }
+    }
+
+    func trust(_ process: SuspiciousProcess) {
+        ProcessTrustStore.trust(process.path)
+        snapshot.processScan?.flagged.removeAll { $0.path == process.path }
+        snapshot.processScan?.trustedByYou += 1
+        updateFindings()
+        show("\(process.name) won't be flagged again")
+    }
+
+    func resetTrustedPrograms() {
+        ProcessTrustStore.reset()
+        Task { await scanProcesses() }
     }
 
     // MARK: Apps
@@ -571,6 +619,11 @@ final class AppModel {
     func explain(_ item: StartupItem) {
         intelligence.generate(key: "startup.\(item.id)", instructions: AIPrompts.explainInstructions,
                               prompt: AIPrompts.startupItem(item))
+    }
+
+    func explain(_ process: SuspiciousProcess) {
+        intelligence.generate(key: "process.\(process.id)", instructions: AIPrompts.explainInstructions,
+                              prompt: AIPrompts.suspiciousProcess(process))
     }
 
     func explain(_ group: CrashGroup) {

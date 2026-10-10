@@ -4,7 +4,8 @@ struct SecurityView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        Page("Security", subtitle: "The protections built into macOS, and whether each one is on.") {
+        Page("Security", subtitle: "Whether the protections built into macOS are on, and whether anything suspicious is running in the background.") {
+            SuspiciousProcessesCard()
             if let sec = model.snapshot.security {
                 Columns(minimum: 320) {
                     ForEach(sec.checks) { check in
