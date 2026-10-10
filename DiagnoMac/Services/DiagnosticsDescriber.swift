@@ -240,7 +240,20 @@ enum DiagnosticsDescriber {
 
     private static func security(_ s: DiagnosticsSnapshot) -> String {
         guard let sec = s.security else { return "Security not read yet." }
-        return sec.checks.map { "- \($0.title): \($0.status)" }.joined(separator: "\n")
+        var lines = sec.checks.map { "- \($0.title): \($0.status)" }
+        if let scan = s.processScan {
+            if scan.flagged.isEmpty {
+                lines.append("Background program scan: \(scan.checked) programs checked, none look suspicious.")
+            } else {
+                lines.append("Background program scan: \(scan.checked) programs checked, \(scan.flagged.count) flagged.")
+                for p in scan.flagged.prefix(5) {
+                    lines.append("- \(p.name) (\(p.concern == .suspicious ? "looks suspicious" : "worth a look")): \(p.assessment.signals.prefix(2).map(\.text).joined(separator: " "))")
+                }
+            }
+        } else {
+            lines.append("Background program scan: not run yet.")
+        }
+        return lines.joined(separator: "\n")
     }
 
     private static func startup(_ s: DiagnosticsSnapshot) -> String {

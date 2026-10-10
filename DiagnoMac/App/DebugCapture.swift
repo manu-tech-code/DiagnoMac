@@ -17,6 +17,7 @@ import SwiftUI
 ///   -appsFilter <name>          open Running Apps with that filter selected (All, With Windows, Menu Bar & Background, Idle)
 ///   -windowSize <W>x<H>         with -captureNow, capture at that window size
 ///   -browseStorage <category> [-browseFolder <path>]   open the Storage page's browser there
+///   -dumpProcessScan <file>   run the background program scan, write what it found to the file, then quit
 ///   -captureCleaningOverlay   capture the Cleaning mode countdown screen as cleaning.png, without starting it
 ///   -testCleaning <seconds> -testCleaningFile <file> [-testCleaningPost]   start Cleaning mode for a few seconds, and
 ///                             with -testCleaningPost send it test input and hold Esc; results go to the file
@@ -63,6 +64,23 @@ enum DebugCapture {
             }
             try? out.joined(separator: "\n").write(toFile: path, atomically: true, encoding: .utf8)
             exit(0)  // Still launching, so NSApp.terminate wouldn't take yet.
+        }
+        // `-dumpProcessScan <file>`: the security scan's result as text, then quit.
+        if let file = value("-dumpProcessScan") {
+            Task {
+                let started = Date()
+                let scan = await ProcessScanner.scan(startupItems: await StartupCollector.collect())
+                var out = ["Checked \(scan.checked) programs in \(String(format: "%.1f", Date().timeIntervalSince(started))) s: " +
+                           "\(scan.fromApple) Apple, \(scan.fromDevelopers) developers, \(scan.flagged.count) flagged"]
+                for p in scan.flagged {
+                    out.append("\n[\(p.concern == .suspicious ? "SUSPICIOUS" : "worth a look")] \(p.name) pid \(p.facts.pid) score \(p.assessment.score) " +
+                               "signed by \(p.signedBy)\n  \(p.path)")
+                    for signal in p.assessment.signals { out.append("  - (\(signal.weight)) \(signal.text)") }
+                }
+                try? out.joined(separator: "\n").write(toFile: file, atomically: true, encoding: .utf8)
+                exit(0)
+            }
+            return
         }
         // `-showUpdateFound <version>`: the sidebar's update button as if a check had found that version.
         if let version = value("-showUpdateFound") { model.updates.debugFound(version) }
