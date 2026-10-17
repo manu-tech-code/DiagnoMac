@@ -13,6 +13,12 @@ struct PerformanceView: View {
                 ThermalTile()
             }
 
+            CoolingCard()
+
+            if model.fanNow?.availability == .available {
+                FanChartsRow()
+            }
+
             CardRow {
                 Card("CPU per core") { CoreBars() }
                 Card("CPU, last 2 minutes") { CPUHistoryChart() }

@@ -24,6 +24,58 @@ struct GPUInfo: Sendable {
     var processes: [GPUProcessUsage]
 }
 
+/// One reading from the SMC. Temperatures are optional because sensor keys differ
+/// between Macs; the fan itself is optional on passively cooled Macs.
+struct FanInfo: Sendable, Equatable {
+    enum Availability: Sendable, Equatable {
+        case available
+        case fanless
+        case unavailable
+    }
+
+    var availability: Availability
+    var rpm: Int = 0
+    var minRPM: Int?
+    var maxRPM: Int?
+    var targetRPM: Int?
+    var fanCount: Int = 0
+    var cpuTemperature: Double?
+    var gpuTemperature: Double?
+    var sampledAt: Date
+
+    var socTemperature: Double? {
+        [cpuTemperature, gpuTemperature].compactMap { $0 }.max()
+    }
+
+    var percentOfMax: Double? {
+        guard let maxRPM, maxRPM > 0 else { return nil }
+        return min(1, max(0, Double(rpm) / Double(maxRPM)))
+    }
+
+    var headroom: Int? {
+        guard let maxRPM, maxRPM > 0 else { return nil }
+        return max(0, maxRPM - rpm)
+    }
+
+    var isSpinningUp: Bool {
+        guard let targetRPM else { return false }
+        return targetRPM - rpm > 80
+    }
+
+    var isSpinningDown: Bool {
+        guard let targetRPM else { return false }
+        return rpm - targetRPM > 80
+    }
+}
+
+/// A paired fan/temperature sample for the response chart and the two-minute trace.
+struct FanSample: Identifiable, Sendable, Equatable {
+    let date: Date
+    let rpm: Double
+    let temperature: Double?
+    var id: Date { date }
+}
+
 struct AdapterInfo: Sendable {
     var name: String
     var watts: Int
