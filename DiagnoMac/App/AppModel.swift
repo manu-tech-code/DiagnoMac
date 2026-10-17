@@ -25,6 +25,10 @@ final class AppModel {
     var cpuNow: CPULoad?
     /// Live GPU utilization samples, newest last.
     var gpuHistory: [Double] = []
+    /// The SMC fan and temperature reading while the CPU & GPU page is open.
+    var fanNow: FanInfo?
+    /// Paired fan/temperature samples for the cooling charts, newest last.
+    var fanHistory: [FanSample] = []
     /// Charger and battery power over the last 10 minutes: every 2 seconds while the Battery page is open,
     /// and at the background rate otherwise, so the chart already has history when the page opens.
     var powerHistory: [PowerSample] = []
@@ -49,6 +53,7 @@ final class AppModel {
 
     private let cpuSampler = CPUSampler()
     private let gpuSampler = GPUSampler()
+    private let fanSampler = FanSampler()
     private let appsSampler = AppsSampler()
     private var speedRunner: SpeedTestRunner?
     private var liveTask: Task<Void, Never>?
@@ -153,7 +158,9 @@ final class AppModel {
         case .battery:
             snapshot.battery = await BatteryCollector.collect()
             snapshot.power = await BatteryCollector.powerSettings()
-        case .performance: snapshot.performance = await PerformanceCollector.collect()
+        case .performance:
+            sampleFan()
+            snapshot.performance = await PerformanceCollector.collect()
         case .memory:
             snapshot.memory = MemoryCollector.collect()
             snapshot.apps = await appsSampler.sample()
@@ -193,13 +200,14 @@ final class AppModel {
         restartSampling()
     }
 
-    private enum Sampler: CaseIterable { case cpu, gpu, battery, memory, apps }
+    private enum Sampler: CaseIterable { case cpu, gpu, fan, battery, memory, apps }
 
     /// How often each reading is taken, from what's on screen. Nil means not at all.
     private struct Schedule {
         var cpu: Duration?
         var gpu: Duration?
         var gpuProcesses: Bool
+        var fan: Duration?
         var battery: Duration
         var memory: Duration
         var apps: Duration
@@ -208,6 +216,7 @@ final class AppModel {
             switch sampler {
             case .cpu: cpu
             case .gpu: gpu
+            case .fan: fan
             case .battery: battery
             case .memory: memory
             case .apps: apps
@@ -224,6 +233,7 @@ final class AppModel {
             cpu: showsCPU ? .seconds(1) : nil,
             gpu: page == .performance ? .seconds(2) : (showsCPU ? .seconds(4) : nil),
             gpuProcesses: page == .performance,
+            fan: page == .performance ? .seconds(1) : nil,
             // In the background the charger's plug and unplug events still arrive straight away.
             battery: page == .battery ? .seconds(2) : (anyVisible ? .seconds(10) : .seconds(120)),
             memory: anyVisible ? .seconds(5) : .seconds(60),
@@ -239,6 +249,10 @@ final class AppModel {
         if schedule.cpu != nil && lastRun[.cpu].map({ ContinuousClock.now - $0 > .seconds(3) }) ?? true {
             _ = cpuSampler.sample()
             lastRun[.cpu] = .now
+        }
+        if schedule.fan != nil {
+            sampleFan()
+            lastRun[.fan] = .now
         }
         liveTask = Task { [weak self] in await self?.samplingLoop() }
     }
@@ -268,6 +282,7 @@ final class AppModel {
         switch sampler {
         case .cpu: sampleCPU()
         case .gpu: sampleGPU(processes: plan.gpuProcesses)
+        case .fan: sampleFan()
         case .battery: await sampleBattery()
         case .memory:
             snapshot.memory = MemoryCollector.collect()
@@ -293,6 +308,15 @@ final class AppModel {
         snapshot.gpu = gpu
         gpuHistory.append(Double(gpu.deviceUtilization) / 100)
         if gpuHistory.count > 90 { gpuHistory.removeFirst(gpuHistory.count - 90) }
+    }
+
+    private func sampleFan() {
+        let reading = fanSampler.sample()
+        fanNow = reading
+        guard reading.availability == .available else { return }
+        fanHistory.append(FanSample(date: reading.sampledAt, rpm: Double(reading.rpm),
+                                    temperature: reading.cpuTemperature ?? reading.gpuTemperature))
+        if fanHistory.count > 120 { fanHistory.removeFirst(fanHistory.count - 120) }
     }
 
     private func sampleBattery() async {
