@@ -42,7 +42,7 @@ The `.xcodeproj` is generated from `project.yml` and is not checked in.
 | Area | Source |
 |---|---|
 | Battery & charging | IOKit `AppleSmartBattery` (capacity, adapter details, power telemetry), IOPowerSources, `pmset -g custom` |
-| CPU & GPU | `host_processor_info` (per-core, every second), `getloadavg`, `ps`, thermal state; IOAccelerator `PerformanceStatistics` and per-app `accumulatedGPUTime` |
+| CPU & GPU | `host_processor_info` (per-core, every second), `getloadavg`, `ps`, thermal state; read-only AppleSMC fan RPM, limits, target and temperature sensors; IOAccelerator `PerformanceStatistics` and per-app `accumulatedGPUTime` |
 | Memory | `host_statistics64`, `vm.swapusage`, `kern.memorystatus_*` |
 | Running apps | `NSWorkspace.runningApplications`, `proc_pid_rusage` (physical footprint and CPU time, including helper processes) |
 | Storage & backups | URL volume resource values, `diskutil info disk0` (SMART), `du` per folder for the breakdown, `diskutil apfs list` (macOS's volumes), `tmutil` |
@@ -53,8 +53,8 @@ The `.xcodeproj` is generated from `project.yml` and is not checked in.
 | Crash logs | `DiagnosticReports` `.ips` headers and crash backtraces |
 | Hardware tests | Keyboard (raw key codes), full-screen display test, stereo speaker tones, trackpad canvas, live camera preview, microphone level meter |
 
-Live readings: CPU every second; GPU, battery and charging power every 2 seconds; memory and apps every 5 seconds.
-DiagnoMac itself uses about 2% CPU while open.
+Live readings: CPU every second; GPU, battery and charging power every 2 seconds; memory and apps every 5 seconds; fan speed and temperatures every second while CPU & GPU is open.
+DiagnoMac itself uses about 2% CPU while open, plus the fan animation while CPU & GPU is open.
 
 Findings are produced by `FindingsEngine` and ranked into a 0–100 score. A daily history is kept in
 `~/Library/Application Support/DiagnoMac/history.json`, and every charger connection in `charge-log.json` next to it.
