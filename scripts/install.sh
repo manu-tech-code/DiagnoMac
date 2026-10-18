@@ -18,7 +18,7 @@ set -euo pipefail
 REPO="manu-tech-code/DiagnoMac"
 FEED="https://github.com/$REPO/releases/latest/download/appcast.xml"
 APP_NAME="DiagnoMac.app"
-BUNDLE_ID="com.amalitech.DiagnoMac"
+BUNDLE_ID="com.manutech.DiagnoMac"
 TEAM_ID="KNK4UH42NN"
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }

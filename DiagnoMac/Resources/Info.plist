@@ -17,9 +17,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.2.9</string>
+	<string>0.3.0</string>
 	<key>CFBundleVersion</key>
-	<string>11</string>
+	<string>12</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.utilities</string>
 	<key>LSMinimumSystemVersion</key>
@@ -37,7 +37,7 @@
 	<key>SUFeedURL</key>
 	<string>https://github.com/manu-tech-code/DiagnoMac/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
-	<string>1820xl8dN4SKhltFG+BUOjCM4heQqrsQ9d6YKqaStiI=</string>
+	<string>+Y6XvT/i4yM3tVzFQAWvk8nQBCve6PtEbYqMphpg6ZU=</string>
 	<key>SUScheduledCheckInterval</key>
 	<integer>21600</integer>
 	<key>SUVerifyUpdateBeforeExtraction</key>

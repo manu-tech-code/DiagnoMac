@@ -69,6 +69,10 @@ enum ReportBuilder {
         if let sec = s.security {
             lines += ["", "SECURITY"]
             for c in sec.checks { lines.append("  \(c.title): \(c.status)") }
+            if let scan = s.processScan {
+                lines.append("  Background programs: \(scan.checked) checked, \(scan.flagged.count) flagged")
+                for p in scan.flagged { lines.append("    \(p.name) (\(p.path)): \(p.assessment.signals.map(\.text).joined(separator: " "))") }
+            }
         }
 
         lines += ["", "FINDINGS"]

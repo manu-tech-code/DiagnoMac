@@ -2,7 +2,7 @@
 # The generated project is not committed.
 name: DiagnoMac
 options:
-  bundleIdPrefix: com.amalitech
+  bundleIdPrefix: com.manutech
   deploymentTarget:
     macOS: "15.0"
   createIntermediateGroups: true
@@ -39,8 +39,8 @@ targets:
       path: DiagnoMac/Resources/Info.plist
       properties:
         CFBundleDisplayName: DiagnoMac
-        CFBundleShortVersionString: "0.2.9"
-        CFBundleVersion: "11"
+        CFBundleShortVersionString: "0.3.0"
+        CFBundleVersion: "12"
         LSApplicationCategoryType: public.app-category.utilities
         LSMinimumSystemVersion: "15.0"
         NSHumanReadableCopyright: "© 2026 Emmanuel Larbi"
@@ -49,9 +49,9 @@ targets:
         NSMicrophoneUsageDescription: "DiagnoMac shows an input level meter so you can check that your microphone works. Audio is never recorded or sent anywhere."
         # Sparkle: the appcast attached to the latest GitHub release, checked daily.
         # SUPublicEDKey is the public half of the update key in the login Keychain
-        # (account com.amalitech.DiagnoMac); see CONTRIBUTING.md.
+        # (account com.manutech.DiagnoMac); see CONTRIBUTING.md.
         SUFeedURL: https://github.com/manu-tech-code/DiagnoMac/releases/latest/download/appcast.xml
-        SUPublicEDKey: 1820xl8dN4SKhltFG+BUOjCM4heQqrsQ9d6YKqaStiI=
+        SUPublicEDKey: "+Y6XvT/i4yM3tVzFQAWvk8nQBCve6PtEbYqMphpg6ZU="
         SUEnableAutomaticChecks: true
         SUScheduledCheckInterval: 21600
         SUVerifyUpdateBeforeExtraction: true
@@ -66,6 +66,6 @@ targets:
         com.apple.security.automation.apple-events: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.amalitech.DiagnoMac
+        PRODUCT_BUNDLE_IDENTIFIER: com.manutech.DiagnoMac
         GENERATE_INFOPLIST_FILE: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

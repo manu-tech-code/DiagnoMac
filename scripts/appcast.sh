@@ -14,7 +14,7 @@ REPO=manu-tech-code/DiagnoMac
 REPO_URL="https://github.com/$REPO"
 SIGN_UPDATE="$ROOT/build/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin/sign_update"
 
-SIGNATURE=$("$SIGN_UPDATE" --account com.amalitech.DiagnoMac "$DMG")   # sparkle:edSignature="…" length="…"
+SIGNATURE=$("$SIGN_UPDATE" --account com.manutech.DiagnoMac "$DMG")   # sparkle:edSignature="…" length="…"
 
 # The release's notes (generated from the merged PRs), rendered by GitHub.
 NOTES=$(gh release view "v$VERSION" --repo "$REPO" --json body --jq .body 2>/dev/null || true)

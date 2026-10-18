@@ -57,7 +57,7 @@ final class UpdateService: NSObject {
         #if DEBUG
         guard Self.debugFeed != nil else {
             NSAlert.informational(title: "No updates in development builds",
-                                  message: "Set DebugFeedURL to a local appcast to try them:\ndefaults write com.amalitech.DiagnoMac DebugFeedURL file:///…/appcast.xml")
+                                  message: "Set DebugFeedURL to a local appcast to try them:\ndefaults write com.manutech.DiagnoMac DebugFeedURL file:///…/appcast.xml")
             return
         }
         #endif
@@ -67,7 +67,7 @@ final class UpdateService: NSObject {
     #if DEBUG
     /// Development builds share the release's bundle id and defaults, so they never check the
     /// real feed: only a local one, set with
-    /// `defaults write com.amalitech.DiagnoMac DebugFeedURL file:///…/appcast.xml`.
+    /// `defaults write com.manutech.DiagnoMac DebugFeedURL file:///…/appcast.xml`.
     static var debugFeed: String? { UserDefaults.standard.string(forKey: "DebugFeedURL") }
 
     /// The update window in a given step, with real notes and nothing to install.

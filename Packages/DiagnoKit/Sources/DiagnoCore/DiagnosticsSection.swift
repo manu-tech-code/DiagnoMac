@@ -63,7 +63,7 @@ extension DiagnosticsSection {
         (["disk*", "storage", "space", "delet*", "clean*", "free up", "cache*", "ssd", "drive"], [.storage], nil),
         (["backup*", "back up", "backed up", "time machine"], [.backup], nil),
         (["wifi", "wi fi", "internet", "network*", "router", "speed test", "ping", "latency", "connection", "online", "offline"], [.network], nil),
-        (["secur*", "virus*", "malware", "spyware", "firewall", "hack*", "filevault", "encrypt*"], [.security], nil),
+        (["secur*", "virus*", "malware", "spyware", "firewall", "hack*", "filevault", "encrypt*", "suspicious*", "suspect*", "trojan*", "miner*", "cryptominer*", "infect*"], [.security], nil),
         (["crash*", "freez*", "froze", "frozen", "hang*", "panic*", "quit unexpectedly"], [.crashes], nil),
         (["bluetooth", "mouse", "keyboard*", "trackpad*", "airpods", "headphone*", "accessor*", "peripheral*", "usb",
           "display", "displays", "monitor", "monitors"], [.devices], nil),
@@ -123,7 +123,11 @@ extension DiagnosticsSection {
             Without a backup, files are lost if the Mac breaks or is lost.
             """
         case .security:
-            "If the firewall is off, DiagnoMac's Security page can turn it on."
+            """
+            If the firewall is off, DiagnoMac's Security page can turn it on. The same page scans background programs for ones \
+            that look suspicious: running from a temporary or hidden folder, pretending to be part of macOS, or mining cryptocurrency. \
+            A flagged program is a hint, not proof, so say it's worth checking rather than that it's a virus.
+            """
         case .startup:
             """
             DiagnoMac's Startup Items page can turn a startup item off. That can be undone, and the app it belongs to \

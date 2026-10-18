@@ -263,6 +263,21 @@ enum AIPrompts {
         """
     }
 
+    static func suspiciousProcess(_ p: SuspiciousProcess) -> String {
+        let reasons = p.assessment.signals.map { "- \($0.text)" }.joined(separator: "\n")
+        return """
+        A security scan flagged this program running on the Mac. Say in plain words what it most likely is, judging from its \
+        name and location, and whether the flags have an innocent explanation. Then say what to do: stopping it is \
+        harmless, and moving its file to the Bin removes it. Don't say it is definitely malware or definitely safe: \
+        the scan only finds hints.
+        Program: \(p.name)
+        Location: \(p.path)
+        Signed by: \(p.signedBy)
+        Why it was flagged:
+        \(reasons)
+        """
+    }
+
     /// The small model sometimes answers with markdown anyway; show it as plain text.
     static func clean(_ text: String) -> String {
         text.replacingOccurrences(of: "**", with: "")
