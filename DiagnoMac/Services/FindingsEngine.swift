@@ -12,6 +12,7 @@ struct DiagnosticsSnapshot: Sendable {
     var storage: StorageInfo?
     var network: NetworkInfo?
     var security: SecurityInfo?
+    var processScan: ProcessScanResult?
     var startup: [StartupItem]?
     var logs: LogsInfo?
     var gpu: GPUInfo?
@@ -37,6 +38,7 @@ final class LiveSnapshot {
     var storage: StorageInfo?
     var network: NetworkInfo?
     var security: SecurityInfo?
+    var processScan: ProcessScanResult?
     var startup: [StartupItem]?
     var logs: LogsInfo?
     var gpu: GPUInfo?
@@ -49,7 +51,7 @@ final class LiveSnapshot {
     /// A copy for the findings engine, the report and the on-device model.
     var value: DiagnosticsSnapshot {
         DiagnosticsSnapshot(machine: machine, battery: battery, hasBattery: hasBattery, power: power, performance: performance,
-                            memory: memory, storage: storage, network: network, security: security, startup: startup,
+                            memory: memory, storage: storage, network: network, security: security, processScan: processScan, startup: startup,
                             logs: logs, gpu: gpu, apps: apps, backup: backup, devices: devices,
                             storageBreakdown: storageBreakdown, takenAt: takenAt)
     }
@@ -189,6 +191,22 @@ enum FindingsEngine {
                 out.append(Finding(id: "packet-loss", severity: .warning, area: .network, title: "\(Int(ping.lossPercent))% packet loss",
                                    detail: "Some packets to \(ping.host) were dropped. Calls and games will stutter.",
                                    actionTitle: "View Network", action: .navigate(.network)))
+            }
+        }
+
+        if let scan = s.processScan, !scan.flagged.isEmpty {
+            let bad = scan.suspicious
+            if let first = bad.first {
+                let title = bad.count == 1 ? "“\(first.name)” looks suspicious" : "\(bad.count) background programs look suspicious"
+                out.append(Finding(id: "suspicious-processes", severity: .critical, area: .security, title: title,
+                                   detail: first.assessment.signals.first?.text ?? "It does several things normal software doesn't.",
+                                   actionTitle: "Review", action: .navigate(.security)))
+            } else {
+                let count = scan.worthChecking.count
+                out.append(Finding(id: "unusual-processes", severity: .warning, area: .security,
+                                   title: count == 1 ? "“\(scan.worthChecking[0].name)” is worth a look" : "\(count) background programs are worth a look",
+                                   detail: scan.worthChecking[0].assessment.signals.first?.text ?? "It does something normal software rarely does.",
+                                   actionTitle: "Review", action: .navigate(.security)))
             }
         }
 

@@ -47,7 +47,7 @@ The `.xcodeproj` is generated from `project.yml` and is not checked in.
 | Running apps | `NSWorkspace.runningApplications`, `proc_pid_rusage` (physical footprint and CPU time, including helper processes) |
 | Storage & backups | URL volume resource values, `diskutil info disk0` (SMART), `du` per folder for the breakdown, `diskutil apfs list` (macOS's volumes), `tmutil` |
 | Network | `NWPathMonitor`, CoreWLAN, `ping`, `getaddrinfo`, `networkQuality` (run under a pseudo-terminal for live progress) |
-| Security | `fdesetup`, `csrutil`, `spctl`, `socketfilterfw`, XProtect bundle, `profiles` |
+| Security | `fdesetup`, `csrutil`, `spctl`, `socketfilterfw`, XProtect bundle, `profiles`; a scan of background programs (`ps`, `proc_pidpath`, code signatures through Security.framework, `lsof`) |
 | Startup items | LaunchAgents / LaunchDaemons plists, `launchctl list` / `print-disabled` |
 | Devices | `system_profiler SPBluetoothDataType SPUSBHostDataType`, displays, charger |
 | Crash logs | `DiagnosticReports` `.ips` headers and crash backtraces |
@@ -82,6 +82,15 @@ All are user-initiated and confirmed:
 - **Cleanup:** folder contents move to the Trash (restorable); unavailable simulators are removed with `xcrun simctl delete unavailable`.
 - **Startup items:** user agents are switched with `launchctl disable/bootout` and `enable/bootstrap`. The plist is never deleted. System-wide items are read-only.
 
+## Security scan of background programs
+
+The Security page checks every running program for the things malware does and normal software rarely does: running
+from a temporary, hidden or Downloads folder, being named like part of macOS without being Apple's, having no real code
+signature or a broken one, still running after its file was deleted, being started by a one-line download-and-run
+command, mining cryptocurrency, or listening for outside connections. Programs signed by Apple are skipped. Each flag
+is a hint with its reasons in plain words, not a verdict, and each program can be stopped, shown in Finder, explained
+on this Mac, or marked as fine. The rules are in `ProcessTriage` (DiagnoKit, with tests). Nothing leaves the Mac.
+
 ## Settings
 
 DiagnoMac → Settings (⌘,), or the gear in the menu bar panel:
@@ -108,7 +117,7 @@ swift scripts/make-icon.swift
 - Debug builds accept `-captureScreens <dir>`, which saves a PNG of each page after the first scan and quits. Add
   `-captureDelay <seconds>`, `-captureAsk "<question>"` (also runs the Explain features), `-captureSpeedTest` or
   `-capturePowerHistory` (fills the power chart with made-up readings and a gap); a `dump.txt` with the AI output and
-  report is written alongside. `-captureCleaningOverlay` captures the Cleaning mode countdown screen, and `-testCleaning <seconds> -testCleaningFile <file> [-testCleaningPost]` runs Cleaning mode for real (once macOS has allowed DiagnoMac), sends it test input, and writes what was swallowed to the file.
+  report is written alongside. `-dumpProcessScan <file>` writes what the background program scan found; `-captureCleaningOverlay` captures the Cleaning mode countdown screen, and `-testCleaning <seconds> -testCleaningFile <file> [-testCleaningPost]` runs Cleaning mode for real (once macOS has allowed DiagnoMac), sends it test input, and writes what was swallowed to the file.
 
 ## Updates
 
