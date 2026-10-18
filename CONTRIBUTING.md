@@ -36,12 +36,12 @@ Nobody can push directly to `main` or `develop`, force-push them or delete them.
 ## The update key
 
 Updates are signed with an EdDSA key in your login Keychain (account
-`com.amalitech.DiagnoMac`); `SUPublicEDKey` in `project.yml` is its public half.
+`com.manutech.DiagnoMac`); `SUPublicEDKey` in `project.yml` is its public half.
 Without the private key, installed copies can't be updated, so keep a backup
 somewhere safe, outside the repo:
 
 ```sh
-build/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys --account com.amalitech.DiagnoMac -x ~/diagnomac-update-key
+build/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys --account com.manutech.DiagnoMac -x ~/diagnomac-update-key
 ```
 
 ## Measuring
