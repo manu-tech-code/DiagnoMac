@@ -37,7 +37,7 @@
 	<key>SUFeedURL</key>
 	<string>https://github.com/manu-tech-code/DiagnoMac/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
-	<string>1820xl8dN4SKhltFG+BUOjCM4heQqrsQ9d6YKqaStiI=</string>
+	<string>+Y6XvT/i4yM3tVzFQAWvk8nQBCve6PtEbYqMphpg6ZU=</string>
 	<key>SUScheduledCheckInterval</key>
 	<integer>21600</integer>
 	<key>SUVerifyUpdateBeforeExtraction</key>

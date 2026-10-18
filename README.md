@@ -116,7 +116,7 @@ DiagnoMac updates itself with [Sparkle](https://sparkle-project.org). Once a day
 GitHub release, checks the download's EdDSA signature, and installs on relaunch. **Check for Updates…** is in the
 DiagnoMac menu and in Settings. The update window shows a timeline of releases, built from their release notes.
 Development builds don't check the real feed; point one at a local appcast with
-`defaults write com.amalitech.DiagnoMac DebugFeedURL file:///…/appcast.xml`.
+`defaults write com.manutech.DiagnoMac DebugFeedURL file:///…/appcast.xml`.
 
 ## Contributing and releases
 

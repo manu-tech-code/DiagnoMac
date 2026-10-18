@@ -5,7 +5,7 @@
 #   scripts/release.sh --upload   also attach both to the draft GitHub release v<version>
 #                                 and publish it (run from release/<version>, after the
 #                                 Release workflow)
-# Sparkle's update key lives in the login Keychain (account com.amalitech.DiagnoMac);
+# Sparkle's update key lives in the login Keychain (account com.manutech.DiagnoMac);
 # its public half is SUPublicEDKey in project.yml.
 # The app is signed with your Apple Development certificate: it runs on your
 # own Macs. Sharing it with other people needs a Developer ID certificate and
